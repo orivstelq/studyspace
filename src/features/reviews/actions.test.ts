@@ -5,12 +5,21 @@ import { parseReport, parseReview } from "./validation";
 const mocks = vi.hoisted(() => ({
     headers: vi.fn(), identity: vi.fn(), database: vi.fn(), revalidate: vi.fn(),
     save: vi.fn(), withdraw: vi.fn(), report: vi.fn(), moderate: vi.fn(), resolve: vi.fn(),
+    rateLimit: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
 vi.mock("@/lib/auth/auth", () => ({ getAuthIdentity: mocks.identity }));
 vi.mock("@/lib/db/private-client", () => ({ privateDatabase: mocks.database }));
+vi.mock("@/lib/security/rate-limit", () => ({
+    enforceRateLimit: mocks.rateLimit,
+    RATE_LIMITS: {
+        reviewSubmission: "review-limit",
+        reportSubmission: "report-limit",
+        moderationMutation: "moderation-limit",
+    },
+}));
 vi.mock("./query", () => ({
     saveOwnReview: mocks.save,
     withdrawOwnReview: mocks.withdraw,
@@ -49,6 +58,7 @@ describe("review, report, and moderation actions", () => {
         mocks.report.mockResolvedValue(true);
         mocks.moderate.mockResolvedValue(true);
         mocks.resolve.mockResolvedValue(true);
+        mocks.rateLimit.mockResolvedValue({ allowed: true });
     });
 
     afterEach(() => vi.unstubAllEnvs());
@@ -75,6 +85,21 @@ describe("review, report, and moderation actions", () => {
         expect(mocks.save).toHaveBeenCalledWith("private-db", "verified-owner", "test-space", 4, "A useful and sufficiently detailed review.");
         expect(await submitReport(null, reportForm())).toMatch(/privately/);
         expect(mocks.report).toHaveBeenCalledWith("private-db", "verified-owner", { type: "LISTING", slug: "test-space" }, "INACCURATE", "The listed hours are no longer current.");
+    });
+
+    it("enforces mutation rate limits before database writes", async () => {
+        mocks.rateLimit.mockResolvedValue({ allowed: false });
+        expect(await updateReview(null, reviewForm())).toMatch(/Too many review/);
+        expect(await submitReport(null, reportForm())).toMatch(/Too many reports/);
+        expect(mocks.save).not.toHaveBeenCalled();
+        expect(mocks.report).not.toHaveBeenCalled();
+
+        mocks.identity.mockResolvedValue({ ownerKey: "moderator", isModerator: true });
+        const form = new FormData();
+        form.set("intent", "approve-review");
+        form.set("id", "d9428888-122b-4b1f-bad6-3c3fb13b14da");
+        expect(await moderateContent(null, form)).toMatch(/Too many moderation/);
+        expect(mocks.moderate).not.toHaveBeenCalled();
     });
 
     it("ignores browser-supplied authority and denies authenticated non-moderators", async () => {

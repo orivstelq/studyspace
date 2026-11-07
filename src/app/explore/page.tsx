@@ -3,10 +3,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { parseDirectoryParams } from "@/features/discovery/directory-params";
 import { Suspense } from "react";
+import { headers } from "next/headers";
 
 import { ExploreDirectory } from "@/features/discovery/explore-directory";
 import { mapDatabaseSpace } from "@/features/discovery/map-record";
 import { listPublishedSpaces } from "@/features/discovery/repository";
+import { clientAddress, enforceRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
 
 export const metadata: Metadata = {
     title: "Explore",
@@ -25,8 +27,28 @@ async function PublishedSpacesDirectory({ searchParams }: Pick<PageProps<"/explo
         );
     }
 
+    const requestHeaders = await headers();
+    let unavailableMessage: string | null = null;
+    try {
+        const limit = await enforceRateLimit(RATE_LIMITS.publicSearch, clientAddress(requestHeaders));
+        if (!limit.allowed) unavailableMessage = "Too many searches. Try again shortly.";
+    } catch (error) {
+        console.error("Explore rate limiter failed:", error instanceof Error ? error.name : "Unknown error");
+        unavailableMessage = "Search is temporarily unavailable. Try again.";
+    }
+    if (unavailableMessage) return <SearchUnavailable message={unavailableMessage} />;
+
     const { spaces, hasNext } = await listPublishedSpaces(filters);
     return <ExploreDirectory spaces={spaces.map(mapDatabaseSpace)} filters={filters} hasNext={hasNext} />;
+}
+
+function SearchUnavailable({ message }: { message: string }) {
+    return (
+        <div role="alert" className="rounded-2xl border border-clay bg-white p-6">
+            <h2 className="text-xl font-semibold">Search unavailable</h2>
+            <p className="mt-3 text-muted">{message}</p>
+        </div>
+    );
 }
 
 export default function ExplorePage({ searchParams }: PageProps<"/explore">) {
