@@ -2,54 +2,38 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
-import { developmentSpaces } from "@/features/discovery/fixtures";
-import { findStudySpaceBySlug } from "@/features/discovery/search";
+import { mapDatabaseSpace } from "@/features/discovery/map-record";
+import { getPublishedSpaceBySlug } from "@/features/discovery/repository";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
 }
 
-export function generateStaticParams() {
-    return developmentSpaces.map((space) => ({
-        slug: space.slug,
-    }));
-}
+// Keep metadata non-indexable until our listing verification
+// and public metadata strategy are complete.
+export const metadata: Metadata = {
+    title: "Study Space Details",
+    description: "Details about a published study space.",
+    robots: {
+        index: false,
+        follow: false,
+    },
+};
 
-export async function generateMetadata({
-    params,
-}: PageProps): Promise<Metadata> {
-    const { slug } = await params;
-
-    const space = findStudySpaceBySlug(
-        developmentSpaces,
-        slug,
-    );
-
-    if (!space) {
-        return { title: "Space not found" };
-    }
-
-    return {
-        title: space.name,
-        description: space.description,
-        robots: { index: false, follow: false },
-    };
-}
-
-export default async function SpaceDetailsPage({
+async function SpaceDetailsContent({
     params,
 }: PageProps) {
     const { slug } = await params;
 
-    const space = findStudySpaceBySlug(
-        developmentSpaces,
-        slug,
-    );
+    const record = await getPublishedSpaceBySlug(slug);
 
-    if (!space) {
+    if (!record) {
         notFound();
     }
+
+    const space = mapDatabaseSpace(record);
 
     return (
         <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
@@ -88,16 +72,22 @@ export default async function SpaceDetailsPage({
                         Amenities
                     </h2>
 
-                    <ul className="mt-5 flex flex-wrap gap-3">
-                        {space.amenities.map((amenity) => (
-                            <li
-                                key={amenity}
-                                className="rounded-full bg-linen px-4 py-2 text-sm capitalize text-ink"
-                            >
-                                {amenity.replaceAll("-", " ")}
-                            </li>
-                        ))}
-                    </ul>
+                    {space.amenities.length > 0 ? (
+                        <ul className="mt-5 flex flex-wrap gap-3">
+                            {space.amenities.map((amenity) => (
+                                <li
+                                    key={amenity}
+                                    className="rounded-full bg-linen px-4 py-2 text-sm capitalize text-ink"
+                                >
+                                    {amenity.replaceAll("-", " ")}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="mt-5 text-muted">
+                            No amenities have been listed yet.
+                        </p>
+                    )}
                 </section>
 
                 <aside className="self-start rounded-2xl border border-clay bg-linen/50 p-6">
@@ -106,19 +96,54 @@ export default async function SpaceDetailsPage({
                     </h2>
 
                     <p className="mt-4 text-sm leading-7 text-muted">
-                        This is a fictional development listing.
-                        Its location and amenities are sample data,
-                        not verified information about a real place.
+                        This listing is published in the StudySpace
+                        directory. Availability and amenities may
+                        change; confirm important details before visiting.
                     </p>
 
                     <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-harbor">
-                        Source
+                        Status
                     </p>
+
                     <p className="mt-1 text-sm text-ink">
-                        Development fixture
+                        Published
+                    </p>
+
+                    <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-harbor">
+                        Last verified
+                    </p>
+
+                    <p className="mt-1 text-sm text-ink">
+                        {record.verifiedAt
+                            ? new Intl.DateTimeFormat("en-US", {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                                timeZone: "UTC",
+                            }).format(record.verifiedAt)
+                            : "Not yet verified"}
                     </p>
                 </aside>
             </div>
         </main>
+    );
+}
+
+export default function SpaceDetailsPage({
+    params,
+}: PageProps) {
+    return (
+        <Suspense
+            fallback={
+                <main
+                    role="status"
+                    className="mx-auto max-w-5xl px-5 py-12 text-muted sm:px-8"
+                >
+                    Loading study space details…
+                </main>
+            }
+        >
+            <SpaceDetailsContent params={params} />
+        </Suspense>
     );
 }

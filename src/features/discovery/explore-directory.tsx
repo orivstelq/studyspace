@@ -221,16 +221,12 @@ export function ExploreDirectory({
                                 </div>
 
                                 <h3 className="mt-6 text-2xl font-semibold tracking-tight">
-                                    {space.source === "development-fixture" ? (
-                                        <Link
-                                            href={`/spaces/${space.slug}`}
-                                            className="text-ink underline-offset-4 hover:text-harbor hover:underline"
-                                        >
-                                            {space.name}
-                                        </Link>
-                                    ) : (
-                                        space.name
-                                    )}
+                                    <Link
+                                        href={`/spaces/${space.slug}`}
+                                        className="text-ink underline-offset-4 hover:text-harbor hover:underline"
+                                    >
+                                        {space.name}
+                                    </Link>
                                 </h3>
 
                                 <p className="mt-2 text-sm text-muted">
@@ -273,7 +269,15 @@ export function ExploreDirectory({
                                     </Link>
                                 ) : (
                                     <p className="mt-6 text-sm text-muted">
-                                        Detailed information coming soon
+                                        <Link
+                                            href={`/spaces/${space.slug}`}
+                                            className="mt-6 inline-flex min-h-11 items-center self-start rounded-lg px-2 py-2 text-sm font-semibold text-harbor hover:bg-linen"
+                                        >
+                                            View space details
+                                            <span aria-hidden="true" className="ml-2">
+                                                →
+                                            </span>
+                                        </Link>
                                     </p>
                                 )}
                             </article>
