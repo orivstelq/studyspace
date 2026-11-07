@@ -1,4 +1,5 @@
 import { expect, type Browser, type BrowserContext, type Page, test } from "@playwright/test";
+import { resolvePlaywrightBaseUrl } from "../../playwright-origin";
 
 const userAState = process.env.PLAYWRIGHT_USER_A_STATE ?? process.env.PLAYWRIGHT_AUTH_STATE;
 const userBState = process.env.PLAYWRIGHT_USER_B_STATE;
@@ -6,6 +7,7 @@ const moderatorState = process.env.PLAYWRIGHT_MODERATOR_STATE;
 const spaceSlug = process.env.PLAYWRIGHT_E2E_SPACE_SLUG ?? "alkek-library";
 const spaceName = process.env.PLAYWRIGHT_E2E_SPACE_NAME ?? "Albert B. Alkek Library";
 const runId = `${Date.now()}-${process.pid}`;
+const baseURL = resolvePlaywrightBaseUrl();
 
 function requireState(value: string | undefined, variable: string) {
     test.skip(!value, `${variable} must point to an ignored storage-state file created from a real Auth0 session.`);
@@ -13,7 +15,7 @@ function requireState(value: string | undefined, variable: string) {
 }
 
 async function contextFor(browser: Browser, storageState: string) {
-    return browser.newContext({ storageState, baseURL: "http://127.0.0.1:3100" });
+    return browser.newContext({ storageState, baseURL });
 }
 
 async function accountLabel(page: Page) {
@@ -109,7 +111,7 @@ test("real user and moderator sessions cover review, report, and authorization t
         await pageA.getByRole("button", { name: /Submit (review|changes)/ }).click();
         await expect(pageA.getByRole("status")).toHaveText("Review submitted for moderator approval.");
 
-        const publicPage = await browser.newPage({ baseURL: "http://127.0.0.1:3100" });
+        const publicPage = await browser.newPage({ baseURL });
         await publicPage.goto(`/spaces/${spaceSlug}`);
         await expect(publicPage.getByText(submittedBody)).toHaveCount(0);
         await publicPage.close();
@@ -164,7 +166,7 @@ test("real Auth0 logout invalidates the application session", async ({ page }) =
     const summary = page.locator("summary[aria-label^='Account menu for']");
     await summary.click();
     await page.getByRole("link", { name: "Sign out" }).click();
-    await page.waitForURL((url) => url.origin === "http://127.0.0.1:3100", { timeout: 30_000 });
+    await page.waitForURL((url) => url.origin === baseURL, { timeout: 30_000 });
     await page.goto("/profile");
     await expect(page.getByRole("heading", { name: "Sign in to save preferences" })).toBeVisible();
 });

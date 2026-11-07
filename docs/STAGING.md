@@ -45,7 +45,15 @@ Every command below is pending approval and requires a direct owner URL supplied
    psql "$STAGING_DIRECT_URL" -f scripts/staging/preflight.sql
    ```
 
-3. With explicit approval to create credentials, generate three independent high-entropy passwords in the approved secret manager. Run `scripts/staging/create-login-identities.sql`; it prompts without echo and aborts if any fixed login already exists. Store each resulting connection URL only in its intended secret store.
+3. With explicit approval to create credentials, generate three independent high-entropy passwords in the approved secret manager. Run the script with a PostgreSQL 18 `psql` client and no user startup file:
+
+   ```sh
+   psql -X "$STAGING_DIRECT_URL" -f scripts/staging/create-login-identities.sql
+   ```
+
+   The script creates or reuses only correctly constrained `NOLOGIN` identities, then uses the supported `\password` command to prompt twice for each password without putting plaintext in SQL history or server logs. Only after all three password commands succeed does one transaction enable `LOGIN` for all three roles. Store each resulting connection URL only in its intended secret store.
+
+   If the client, network, or a password prompt fails before the final commit, the identities remain `NOLOGIN`. Inspect `pg_roles`, confirm all three fixed identities are present with `rolcanlogin = false` and no elevated attributes, and rerun the entire script; it safely replaces all three passwords. If any identity is unexpectedly `LOGIN` or has different attributes, do not rerun. Immediately disable all three with `ALTER ROLE ... NOLOGIN` in one owner transaction, investigate the partial change, restore the documented attributes, and then rerun. A completed run is not a password-rotation mechanism: disable all three identities first and schedule the resulting runtime interruption before using this recovery path.
 4. Apply the fixed membership options:
 
    ```sh
@@ -103,10 +111,11 @@ Public Playwright tests run in CI without identity. Live authentication uses rea
 PLAYWRIGHT_USER_A_STATE=/ignored/path/user-a.json \
 PLAYWRIGHT_USER_B_STATE=/ignored/path/user-b.json \
 PLAYWRIGHT_MODERATOR_STATE=/ignored/path/moderator.json \
+PLAYWRIGHT_BASE_URL=https://staging.example.invalid \
 npm run test:e2e -- --project=chromium-authenticated
 ```
 
-All state files must be under an ignored local path such as `playwright/.auth/`, must be created from dedicated staging test accounts, and must never be uploaded as artifacts. The live suite changes Saved/Profile/review/report data, cleans up the favorite/profile, withdraws the test review, and signs out user A. Use disposable test accounts and run it serially. A configured project without these real sessions does not count as live end-to-end verification.
+`PLAYWRIGHT_BASE_URL` accepts only an origin-only HTTPS URL and suppresses the local web server; omit it to retain local `127.0.0.1:3100` behavior. All state files must be under an ignored local path such as `playwright/.auth/`, must be created from dedicated staging test accounts, and must never be printed or uploaded as artifacts. The live suite changes Saved/Profile/review/report data, cleans up the favorite/profile, withdraws the test review, and signs out user A. Use disposable test accounts and run it serially. A configured project without these real sessions does not count as live end-to-end verification.
 
 After deployment, run the public, GET-only verifier:
 
