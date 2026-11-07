@@ -3,13 +3,14 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { developmentSpaces } from "./fixtures";
+
 import { filterStudySpaces } from "./search";
 import {
     AMENITIES,
     SPACE_CATEGORIES,
     type Amenity,
     type SpaceCategory,
+    type StudySpace,
 } from "./types";
 
 const categoryLabels: Record<SpaceCategory, string> = {
@@ -30,7 +31,13 @@ const amenityLabels: Record<Amenity, string> = {
 type CategoryFilter = SpaceCategory | "all";
 type AmenityFilter = Amenity | "all";
 
-export function ExploreDirectory() {
+interface ExploreDirectoryProps {
+    spaces: StudySpace[];
+}
+
+export function ExploreDirectory({
+    spaces,
+}: ExploreDirectoryProps) {
     const [query, setQuery] = useState("");
     const [category, setCategory] =
         useState<CategoryFilter>("all");
@@ -39,12 +46,12 @@ export function ExploreDirectory() {
 
     const results = useMemo(
         () =>
-            filterStudySpaces(developmentSpaces, {
+            filterStudySpaces(spaces, {
                 query,
                 category,
                 amenity,
             }),
-        [query, category, amenity],
+        [spaces, query, category, amenity],
     );
 
     function resetFilters() {
@@ -53,9 +60,10 @@ export function ExploreDirectory() {
         setAmenity("all");
     }
 
+    const hasSpaces = spaces.length > 0;
+
     return (
         <div>
-            {/* Search and filters */}
             <section
                 aria-label="Study-space filters"
                 className="rounded-2xl border border-clay bg-white p-5 sm:p-7"
@@ -150,7 +158,6 @@ export function ExploreDirectory() {
                 </div>
             </section>
 
-            {/* Search results */}
             <section
                 aria-label="Search results"
                 className="mt-9"
@@ -166,31 +173,35 @@ export function ExploreDirectory() {
                     </h2>
 
                     <span className="rounded-full bg-linen px-3 py-1 text-xs font-semibold text-harbor">
-                        Fictional demo listings
+                        Published directory
                     </span>
                 </div>
 
                 {results.length === 0 ? (
-                    /* No results */
                     <div className="rounded-2xl border border-clay bg-white p-8 text-center sm:p-12">
                         <h3 className="text-xl font-semibold">
-                            No matching spaces
+                            {hasSpaces
+                                ? "No matching spaces"
+                                : "No published spaces yet"}
                         </h3>
 
                         <p className="mt-3 text-muted">
-                            Try a different search or remove a filter.
+                            {hasSpaces
+                                ? "Try a different search or remove a filter."
+                                : "We're building the directory. Published locations will appear here as they become available."}
                         </p>
 
-                        <button
-                            type="button"
-                            onClick={resetFilters}
-                            className="mt-6 rounded-lg bg-harbor px-5 py-3 font-semibold text-white hover:bg-ink"
-                        >
-                            Reset search
-                        </button>
+                        {hasSpaces && (
+                            <button
+                                type="button"
+                                onClick={resetFilters}
+                                className="mt-6 rounded-lg bg-harbor px-5 py-3 font-semibold text-white hover:bg-ink"
+                            >
+                                Reset search
+                            </button>
+                        )}
                     </div>
                 ) : (
-                    /* Result cards */
                     <div className="grid gap-5 md:grid-cols-2">
                         {results.map((space) => (
                             <article
@@ -203,18 +214,23 @@ export function ExploreDirectory() {
                                     </span>
 
                                     <span className="text-xs text-muted">
-                                        Demo only
+                                        {space.source === "published"
+                                            ? "Published"
+                                            : "Demo only"}
                                     </span>
                                 </div>
 
-                                {/* Space details link */}
                                 <h3 className="mt-6 text-2xl font-semibold tracking-tight">
-                                    <Link
-                                        href={`/spaces/${space.slug}`}
-                                        className="text-ink underline-offset-4 hover:text-harbor hover:underline"
-                                    >
-                                        {space.name}
-                                    </Link>
+                                    {space.source === "development-fixture" ? (
+                                        <Link
+                                            href={`/spaces/${space.slug}`}
+                                            className="text-ink underline-offset-4 hover:text-harbor hover:underline"
+                                        >
+                                            {space.name}
+                                        </Link>
+                                    ) : (
+                                        space.name
+                                    )}
                                 </h3>
 
                                 <p className="mt-2 text-sm text-muted">
@@ -230,27 +246,36 @@ export function ExploreDirectory() {
                                         Listed amenities
                                     </p>
 
-                                    <ul className="flex flex-wrap gap-2">
-                                        {space.amenities.map((item) => (
-                                            <li
-                                                key={item}
-                                                className="rounded-full bg-paper px-3 py-2 text-xs font-medium text-ink"
-                                            >
-                                                {amenityLabels[item]}
-                                            </li>
-                                        ))}
-                                    </ul>
+                                    {space.amenities.length > 0 ? (
+                                        <ul className="flex flex-wrap gap-2">
+                                            {space.amenities.map((item) => (
+                                                <li
+                                                    key={item}
+                                                    className="rounded-full bg-paper px-3 py-2 text-xs font-medium text-ink"
+                                                >
+                                                    {amenityLabels[item]}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-sm text-muted">
+                                            No amenities listed yet.
+                                        </p>
+                                    )}
                                 </div>
 
-                                <Link
-                                    href={`/spaces/${space.slug}`}
-                                    className="mt-6 inline-flex min-h-11 items-center self-start rounded-lg px-2 py-2 text-sm font-semibold text-harbor hover:bg-linen"
-                                >
-                                    View space details
-                                    <span aria-hidden="true" className="ml-2">
-                                        →
-                                    </span>
-                                </Link>
+                                {space.source === "development-fixture" ? (
+                                    <Link
+                                        href={`/spaces/${space.slug}`}
+                                        className="mt-6 inline-flex min-h-11 items-center self-start rounded-lg px-2 py-2 text-sm font-semibold text-harbor hover:bg-linen"
+                                    >
+                                        View space details
+                                    </Link>
+                                ) : (
+                                    <p className="mt-6 text-sm text-muted">
+                                        Detailed information coming soon
+                                    </p>
+                                )}
                             </article>
                         ))}
                     </div>

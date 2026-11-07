@@ -1,12 +1,23 @@
 
 import type { Metadata } from "next";
+import { Suspense } from "react";
+
 import { ExploreDirectory } from "@/features/discovery/explore-directory";
+import { mapDatabaseSpace } from "@/features/discovery/map-record";
+import { listPublishedSpaces } from "@/features/discovery/repository";
 
 export const metadata: Metadata = {
     title: "Explore",
     description:
         "Explore study-friendly spaces and filter by environment and amenities.",
 };
+
+async function PublishedSpacesDirectory() {
+    const records = await listPublishedSpaces();
+    const spaces = records.map(mapDatabaseSpace);
+
+    return <ExploreDirectory spaces={spaces} />;
+}
 
 export default function ExplorePage() {
     return (
@@ -21,13 +32,24 @@ export default function ExplorePage() {
                 </h1>
 
                 <p className="mt-4 leading-7 text-muted">
-                    Explore spaces by their environment and amenities.
-                    This early preview uses fictional records while
-                    we build the real directory.
+                    Explore published study spaces by their environment
+                    and amenities. The directory is growing as new
+                    locations are added.
                 </p>
             </div>
 
-            <ExploreDirectory />
+            <Suspense
+                fallback={
+                    <div
+                        role="status"
+                        className="rounded-2xl border border-clay bg-white p-8 text-muted"
+                    >
+                        Loading study spaces…
+                    </div>
+                }
+            >
+                <PublishedSpacesDirectory />
+            </Suspense>
         </main>
     );
 }

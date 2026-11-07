@@ -29,7 +29,7 @@ export interface StudySpace {
     city: string;
     region: string;
     amenities: Amenity[];
-    source: "development-fixture";
+    source: "development-fixture" | "published";
 }
 
 export interface SearchFilters {
