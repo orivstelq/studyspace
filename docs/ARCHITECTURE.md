@@ -45,7 +45,7 @@ Authentication:
 Testing:
 - Vitest for unit tests
 - Integration tests for database/API behavior
-- Playwright for end-to-end testing (planned)
+- Playwright for production-build end-to-end testing
 
 ## 3. Responsibilities
 
@@ -238,7 +238,7 @@ Before merging changes:
 
 ## 12. Deployment
 
-Deployment platform: TBD.
+The proposed production platform is Vercel for the Next.js runtime and Neon for managed PostgreSQL. See `docs/DEPLOYMENT.md` for alternatives, cost constraints, pooling, migration, backup, and rollback decisions.
 
 Require:
 - HTTPS
@@ -259,3 +259,5 @@ The header account menu is a streamed server component inside `Suspense`, so ses
 Profile stores an optional preferred category and a bounded set of known amenity codes. The same private runtime role and transaction-local owner context protect profile reads and writes with PostgreSQL row-level security. A bounded recommendation query scores published spaces deterministically: category matches receive two points, confirmed amenity matches receive one each, and a checked source receives one. The profile UI shows every reason; unknown facts receive no credit. Public directory order remains unchanged.
 
 Reviews use a one-row-per-owner-and-listing lifecycle, with a database trigger preventing owner or listing reassignment. Owner edits return the same row to `PENDING`, temporarily removing an approved review from public view; the MVP does not retain a separate published version. Public reads select only `APPROVED` reviews and explicit public fields. Reports target either a published listing or an approved review and are invisible to their submitter after insertion. `/admin` reads bounded pending, published, and report queues only after the verified Auth0 subject matches the server-only moderator allowlist. Every moderator transition is checked in the DAL, constrained by the current status, protected by PostgreSQL policies, and written to `ModerationAction` in the same transaction.
+
+Rate limits use an atomic PostgreSQL fixed-window table through the private runtime role. This provides cross-instance enforcement without a separate cache service and stores only HMAC-pseudonymized subjects. Public API exhaustion returns HTTP 429; all protected mutations fail closed when shared enforcement is unavailable. Playwright exercises public navigation, search, detail, responsive, and recoverable error flows against the production server. Authenticated Playwright coverage accepts only an ignored environment-local storage state.

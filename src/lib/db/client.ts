@@ -3,6 +3,7 @@ import "server-only";
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
+import { configuredPoolSize } from "./pool";
 
 const globalForPrisma = globalThis as unknown as {
     prisma?: PrismaClient;
@@ -19,7 +20,7 @@ function createPrismaClient(): PrismaClient {
 
     const adapter = new PrismaPg({
         connectionString,
-        max: 5,
+        max: configuredPoolSize("DATABASE_POOL_MAX"),
     });
 
     return new PrismaClient({ adapter });

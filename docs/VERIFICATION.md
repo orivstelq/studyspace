@@ -35,10 +35,24 @@ Account identity coverage includes display-name preference, email fallback, inva
 
 ## Remaining release gates
 
-The following checks require a production-like deployment or live Auth0 accounts and are not satisfied by local or pull-request CI:
+Phase 2 production-readiness changes, local PostgreSQL and Chromium, 2026-11-07:
 
-- Server-side rate limiting for authentication, reviews, reports, and expensive directory searches
-- HTTPS termination with HSTS enabled and verified
-- A deployment-specific strict Content Security Policy for scripts
+- Unit tests: 59 passed
+- PostgreSQL integration tests: 19 passed
+- ESLint: passed
+- TypeScript: passed (`next typegen` and `tsc --noEmit`)
+- Production build: passed
+- Public Playwright tests: 3 passed in Chromium
+- Dependency audit: 0 known vulnerabilities
+
+Automated Phase 2 coverage includes atomic cross-instance rate-limit enforcement and reset, public-role denial for private counters, HTTP 429/503 behavior, mutation denial before writes, production CSP and HSTS configuration, public navigation, directory search, listing details, recoverable invalid-filter and 404 states, and horizontal overflow checks at 390 px and 1440 px. The connected in-app browser was unavailable; the repository's local Playwright Chromium runner supplied the browser results above.
+
+The following checks still require a production-like deployment, provider configuration, or live Auth0 accounts and are not satisfied by local or pull-request CI:
+
+- Provisioning decisions for paid plan, region, custom domain, backup retention, and recovery objectives; no service has been purchased or deployed
+- Live HTTPS redirect, HSTS, CSP violation, forwarding-header trust, connection-pool, and rate-limit threshold/load verification on the final origin
+- Provider-level volumetric and Auth0 login-abuse protections, monitoring, alerting, and rate-limit bucket maintenance
 - Account-menu and Profile testing with two live Auth0 accounts plus a signed-out session
+- Authenticated Playwright execution with an ignored environment-local storage state
 - End-to-end moderator testing with live moderator and non-moderator accounts, covering approve, reject, hide, report resolution, and audit records
+- A rehearsed application rollback and isolated point-in-time database restore

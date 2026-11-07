@@ -22,6 +22,8 @@ psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f scripts/grant-runtime-roles.sql
 npm run dev
 ```
 
+Set `RATE_LIMIT_SECRET` to an independent random secret in production. Local development can fall back to `AUTH0_SECRET`, or to a development-only constant when authentication is not configured. Production intentionally fails closed without the dedicated value.
+
 Run the grant script as the same migration owner that creates application tables. It removes default runtime access to future tables; grant public or private access explicitly after reviewing each new table.
 
 Open [StudySpace locally](http://localhost:3000). The directory starts empty. The [listing review guide](docs/LISTINGS.md) explains how to import the two reviewed San Marcos listings.
@@ -49,13 +51,16 @@ npm test
 npm run test:integration
 npm run lint
 npm run build
+npm run test:e2e
 npm audit
 ```
 
 Integration tests read development URLs from `.env` and switch to `studyspace_test`. They refuse non-loopback hosts and other database names. The test database should contain no starter listings.
 
+Playwright runs against a production build and expects the reviewed San Marcos fixture in the development database. Public browser tests need no account. Optional authenticated coverage reads `PLAYWRIGHT_AUTH_STATE` from an ignored environment-local file; never commit a storage-state file or real credentials. See the [deployment guide](docs/DEPLOYMENT.md) for production checks.
+
 `GET /api/spaces` accepts `q`, `category`, `amenity`, and `page`. It returns up to 20 published listings per page, the number of listings on the current page, and a `hasNext` flag. Search matches a literal, case-insensitive substring of the name, description, city, or region. Page order uses name and a stable tie-breaker. If listings change between requests, offset pagination can shift the results. `GET /api/spaces/[slug]` returns a single published listing or a generic 404.
 
 Each signed-in account may keep one review per published listing. New reviews and edits are pending until approved; editing an approved review temporarily removes it from public view rather than preserving the previous version. Withdrawal also removes a review from public view. Reports are readable only by configured moderators. Moderation transitions are enforced server-side and recorded in an append-only audit table.
 
-[Product requirements](docs/PRD.md) · [Architecture](docs/ARCHITECTURE.md) · [Data model](docs/DATA_MODEL.md) · [Security](docs/SECURITY.md) · [Verification record](docs/VERIFICATION.md)
+[Product requirements](docs/PRD.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Data model](docs/DATA_MODEL.md) · [Security](docs/SECURITY.md) · [Verification record](docs/VERIFICATION.md)
