@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../src/generated/prisma/client";
-import { queryPublishedSpaces } from "../../src/features/discovery/query";
+import { queryPublishedSpaceBySlug, queryPublishedSpaces } from "../../src/features/discovery/query";
 
 function getTestUrl(
     key: "DIRECT_URL" | "DATABASE_URL",
@@ -54,6 +54,66 @@ describe("Published study spaces repository", () => {
     afterAll(async () => {
         await prisma.$disconnect();
         await migrationPool.end();
+    });
+
+    it("returns an exact published slug with only public detail fields", async () => {
+        const id = randomUUID();
+        const slug = `test-${id}`;
+        await migrationPool.query(
+            `INSERT INTO "StudySpace" (
+                "id", "slug", "name", "description", "category",
+                "city", "region", "status", "sourceType", "updatedAt"
+            ) VALUES ($1, $2, 'Detail test', 'Temporary test record',
+                'LIBRARY', 'Test City', 'Test Region', 'PUBLISHED', 'OFFICIAL', NOW())`,
+            [id, slug],
+        );
+
+        try {
+            expect(await queryPublishedSpaceBySlug(prisma, slug)).toEqual({
+                id,
+                slug,
+                name: "Detail test",
+                description: "Temporary test record",
+                category: "LIBRARY",
+                city: "Test City",
+                region: "Test Region",
+                verifiedAt: null,
+                amenities: [],
+            });
+
+            for (const missingSlug of [
+                slug.toUpperCase(),
+                `${slug}-missing`,
+                `${slug}' OR '1'='1`,
+            ]) {
+                expect(await queryPublishedSpaceBySlug(prisma, missingSlug)).toBeNull();
+            }
+        } finally {
+            await migrationPool.query('DELETE FROM "StudySpace" WHERE "id" = $1', [id]);
+        }
+    });
+
+    it.each([
+        ["DRAFT", "OFFICIAL"],
+        ["ARCHIVED", "OFFICIAL"],
+        ["DRAFT", "DEVELOPMENT_FIXTURE"],
+    ])("does not reveal %s %s listings by known slug", async (status, source) => {
+        const id = randomUUID();
+        const slug = `test-${id}`;
+        await migrationPool.query(
+            `INSERT INTO "StudySpace" (
+                "id", "slug", "name", "description", "category",
+                "city", "region", "status", "sourceType", "updatedAt"
+            ) VALUES ($1, $2, 'Private detail test', 'Temporary test record',
+                'LIBRARY', 'Test City', 'Test Region', $3, $4, NOW())`,
+            [id, slug, status, source],
+        );
+
+        try {
+            expect(await queryPublishedSpaceBySlug(prisma, slug)).toBeNull();
+        } finally {
+            await migrationPool.query('DELETE FROM "StudySpace" WHERE "id" = $1', [id]);
+        }
     });
 
     it("returns only eligible records in order with a 20-item limit", async () => {
