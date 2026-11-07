@@ -1,10 +1,5 @@
-
-"use client";
-
 import Link from "next/link";
-import { useMemo, useState } from "react";
-
-import { filterStudySpaces } from "./search";
+import { exploreUrl, MAX_SEARCH_LENGTH, type DirectoryFilters } from "./directory-params";
 import {
     AMENITIES,
     SPACE_CATEGORIES,
@@ -28,43 +23,19 @@ const amenityLabels: Record<Amenity, string> = {
     accessible: "Accessible",
 };
 
-type CategoryFilter = SpaceCategory | "all";
-type AmenityFilter = Amenity | "all";
-
 interface ExploreDirectoryProps {
     spaces: StudySpace[];
+    filters: DirectoryFilters;
+    hasNext: boolean;
 }
 
-export function ExploreDirectory({
-    spaces,
-}: ExploreDirectoryProps) {
-    const [query, setQuery] = useState("");
-    const [category, setCategory] =
-        useState<CategoryFilter>("all");
-    const [amenity, setAmenity] =
-        useState<AmenityFilter>("all");
-
-    const results = useMemo(
-        () =>
-            filterStudySpaces(spaces, {
-                query,
-                category,
-                amenity,
-            }),
-        [spaces, query, category, amenity],
-    );
-
-    function resetFilters() {
-        setQuery("");
-        setCategory("all");
-        setAmenity("all");
-    }
-
-    const hasSpaces = spaces.length > 0;
+export function ExploreDirectory({ spaces, filters, hasNext }: ExploreDirectoryProps) {
+    const hasFilters = Boolean(filters.query || filters.category !== "all" || filters.amenity !== "all");
 
     return (
         <div>
-            <section
+            <form
+                action="/explore"
                 aria-label="Study-space filters"
                 className="rounded-2xl border border-clay bg-white p-5 sm:p-7"
             >
@@ -80,12 +51,10 @@ export function ExploreDirectory({
                         <input
                             id="space-search"
                             type="search"
-                            value={query}
-                            onChange={(event) =>
-                                setQuery(event.target.value)
-                            }
+                            name="q"
+                            defaultValue={filters.query}
                             placeholder="Search by name or description"
-                            maxLength={120}
+                            maxLength={MAX_SEARCH_LENGTH}
                             className="w-full rounded-lg border border-clay bg-paper px-4 py-3 text-ink placeholder:text-muted focus:border-harbor"
                         />
                     </div>
@@ -100,12 +69,8 @@ export function ExploreDirectory({
 
                         <select
                             id="category-filter"
-                            value={category}
-                            onChange={(event) =>
-                                setCategory(
-                                    event.target.value as CategoryFilter,
-                                )
-                            }
+                            name="category"
+                            defaultValue={filters.category}
                             className="w-full rounded-lg border border-clay bg-paper px-4 py-3"
                         >
                             <option value="all">All types</option>
@@ -128,12 +93,8 @@ export function ExploreDirectory({
 
                         <select
                             id="amenity-filter"
-                            value={amenity}
-                            onChange={(event) =>
-                                setAmenity(
-                                    event.target.value as AmenityFilter,
-                                )
-                            }
+                            name="amenity"
+                            defaultValue={filters.amenity}
                             className="w-full rounded-lg border border-clay bg-paper px-4 py-3"
                         >
                             <option value="all">Any amenity</option>
@@ -147,16 +108,15 @@ export function ExploreDirectory({
                     </div>
                 </div>
 
-                <div className="mt-5 flex justify-end">
-                    <button
-                        type="button"
-                        onClick={resetFilters}
-                        className="rounded-lg px-4 py-2 text-sm font-semibold text-harbor hover:bg-linen"
-                    >
+                <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
+                    <Link href="/explore" className="rounded-lg px-4 py-3 text-sm font-semibold text-harbor hover:bg-linen">
                         Clear filters
+                    </Link>
+                    <button type="submit" className="rounded-lg bg-harbor px-5 py-3 text-sm font-semibold text-white hover:bg-ink">
+                        Search
                     </button>
                 </div>
-            </section>
+            </form>
 
             <section
                 aria-label="Search results"
@@ -168,8 +128,8 @@ export function ExploreDirectory({
                         aria-live="polite"
                         aria-atomic="true"
                     >
-                        {results.length}{" "}
-                        {results.length === 1 ? "space" : "spaces"} found
+                        {spaces.length}{" "}
+                        {spaces.length === 1 ? "space" : "spaces"} on this page
                     </h2>
 
                     <span className="rounded-full bg-linen px-3 py-1 text-xs font-semibold text-harbor">
@@ -177,36 +137,28 @@ export function ExploreDirectory({
                     </span>
                 </div>
 
-                {results.length === 0 ? (
+                {spaces.length === 0 ? (
                     <div className="rounded-2xl border border-clay bg-white p-8 text-center sm:p-12">
                         <h3 className="text-xl font-semibold">
-                            {hasSpaces
-                                ? "No matching spaces"
-                                : "No published spaces yet"}
+                            {filters.page > 1 ? "No spaces on this page" : hasFilters ? "No matching spaces" : "No published spaces yet"}
                         </h3>
-
                         <p className="mt-3 text-muted">
-                            {hasSpaces
+                            {filters.page > 1 ? "Go back to the first page of these results." : hasFilters
                                 ? "Try a different search or remove a filter."
-                                : "We're building the directory. Published locations will appear here as they become available."}
+                                : "Published locations will appear here as they become available."}
                         </p>
-
-                        {hasSpaces && (
-                            <button
-                                type="button"
-                                onClick={resetFilters}
-                                className="mt-6 rounded-lg bg-harbor px-5 py-3 font-semibold text-white hover:bg-ink"
-                            >
-                                Reset search
-                            </button>
+                        {filters.page > 1 && (
+                            <Link href={exploreUrl(filters, 1)} className="mt-4 inline-block font-semibold text-harbor underline">
+                                First page
+                            </Link>
                         )}
                     </div>
                 ) : (
                     <div className="grid gap-5 md:grid-cols-2">
-                        {results.map((space) => (
+                        {spaces.map((space) => (
                             <article
                                 key={space.id}
-                                className="flex flex-col rounded-2xl border border-clay bg-white p-6 transition-colors hover:border-harbor"
+                                className="flex min-w-0 flex-col wrap-anywhere rounded-2xl border border-clay bg-white p-6 transition-colors hover:border-harbor"
                             >
                                 <div className="flex items-start justify-between gap-3">
                                     <span className="rounded-md bg-linen px-3 py-1 text-xs font-semibold text-harbor">
@@ -260,29 +212,16 @@ export function ExploreDirectory({
                                     )}
                                 </div>
 
-                                {space.source === "development-fixture" ? (
-                                    <Link
-                                        href={`/spaces/${space.slug}`}
-                                        className="mt-6 inline-flex min-h-11 items-center self-start rounded-lg px-2 py-2 text-sm font-semibold text-harbor hover:bg-linen"
-                                    >
-                                        View space details
-                                    </Link>
-                                ) : (
-                                    <p className="mt-6 text-sm text-muted">
-                                        <Link
-                                            href={`/spaces/${space.slug}`}
-                                            className="mt-6 inline-flex min-h-11 items-center self-start rounded-lg px-2 py-2 text-sm font-semibold text-harbor hover:bg-linen"
-                                        >
-                                            View space details
-                                            <span aria-hidden="true" className="ml-2">
-                                                →
-                                            </span>
-                                        </Link>
-                                    </p>
-                                )}
                             </article>
                         ))}
                     </div>
+                )}
+                {(filters.page > 1 || hasNext) && (
+                    <nav aria-label="Results pages" className="mt-6 flex flex-wrap items-center gap-4">
+                        {filters.page > 1 && <Link rel="prev" href={exploreUrl(filters, filters.page - 1)} className="rounded-lg border border-clay px-4 py-3 text-sm font-semibold text-harbor">Previous</Link>}
+                        <span className="text-sm text-muted">Page {filters.page}</span>
+                        {hasNext && <Link rel="next" href={exploreUrl(filters, filters.page + 1)} className="rounded-lg border border-clay px-4 py-3 text-sm font-semibold text-harbor">Next</Link>}
+                    </nav>
                 )}
             </section>
         </div>

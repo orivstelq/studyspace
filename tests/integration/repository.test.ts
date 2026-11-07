@@ -184,7 +184,15 @@ describe("Published study spaces repository", () => {
                 insertedIds.push(id);
             }
 
-            const results = await queryPublishedSpaces(prisma);
+            const filters = { query: prefix.toUpperCase(), category: "library", amenity: "all", page: 1 } as const;
+            const { spaces: results, hasNext } = await queryPublishedSpaces(prisma, filters);
+            expect(hasNext).toBe(true);
+            const lastPage = await queryPublishedSpaces(prisma, { ...filters, page: 2 });
+            expect(lastPage.spaces.map((space) => space.name)).toEqual([`${prefix}-20`, `${prefix}-21`]);
+            expect(lastPage.hasNext).toBe(false);
+            expect((await queryPublishedSpaces(prisma, { ...filters, query: `${prefix}%` })).spaces).toEqual([]);
+            expect((await queryPublishedSpaces(prisma, { ...filters, category: "cafe" })).spaces).toEqual([]);
+            expect((await queryPublishedSpaces(prisma, { ...filters, amenity: "wifi" })).spaces).toEqual([]);
 
             // The dedicated test DB should contain only our
             // temporary records for this test.

@@ -4,7 +4,7 @@ import { AMENITIES } from "./types";
 import type { queryPublishedSpaces } from "./query";
 
 type DatabaseSpace =
-    Awaited<ReturnType<typeof queryPublishedSpaces>>[number];
+    Awaited<ReturnType<typeof queryPublishedSpaces>>["spaces"][number];
 
 const categoryMap = {
     LIBRARY: "library",

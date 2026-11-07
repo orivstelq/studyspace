@@ -1,5 +1,7 @@
 
 import type { Metadata } from "next";
+import Link from "next/link";
+import { parseDirectoryParams } from "@/features/discovery/directory-params";
 import { Suspense } from "react";
 
 import { ExploreDirectory } from "@/features/discovery/explore-directory";
@@ -12,14 +14,22 @@ export const metadata: Metadata = {
         "Explore study-friendly spaces and filter by environment and amenities.",
 };
 
-async function PublishedSpacesDirectory() {
-    const records = await listPublishedSpaces();
-    const spaces = records.map(mapDatabaseSpace);
+async function PublishedSpacesDirectory({ searchParams }: Pick<PageProps<"/explore">, "searchParams">) {
+    const filters = parseDirectoryParams(await searchParams);
+    if (!filters) {
+        return (
+            <div className="rounded-2xl border border-clay bg-white p-6">
+                <h2 className="text-xl font-semibold">These search filters are invalid</h2>
+                <Link href="/explore" className="mt-4 inline-block font-semibold text-harbor underline">Reset filters</Link>
+            </div>
+        );
+    }
 
-    return <ExploreDirectory spaces={spaces} />;
+    const { spaces, hasNext } = await listPublishedSpaces(filters);
+    return <ExploreDirectory spaces={spaces.map(mapDatabaseSpace)} filters={filters} hasNext={hasNext} />;
 }
 
-export default function ExplorePage() {
+export default function ExplorePage({ searchParams }: PageProps<"/explore">) {
     return (
         <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
             <div className="mb-10 max-w-2xl">
@@ -48,7 +58,7 @@ export default function ExplorePage() {
                     </div>
                 }
             >
-                <PublishedSpacesDirectory />
+                <PublishedSpacesDirectory searchParams={searchParams} />
             </Suspense>
         </main>
     );

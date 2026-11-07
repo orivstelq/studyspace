@@ -1,6 +1,7 @@
 
 import "server-only";
 
+import type { DirectoryFilters } from "./directory-params";
 import { cache } from "react";
 import { prisma } from "@/lib/db/client";
 
@@ -9,8 +10,8 @@ import {
     queryPublishedSpaceBySlug,
 } from "./query";
 
-export async function listPublishedSpaces() {
-    return queryPublishedSpaces(prisma);
+export async function listPublishedSpaces(filters: DirectoryFilters) {
+    return queryPublishedSpaces(prisma, filters);
 }
 
 export const getPublishedSpaceBySlug = cache(
