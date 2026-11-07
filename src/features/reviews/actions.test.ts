@@ -77,10 +77,12 @@ describe("review, report, and moderation actions", () => {
         expect(mocks.report).toHaveBeenCalledWith("private-db", "verified-owner", { type: "LISTING", slug: "test-space" }, "INACCURATE", "The listed hours are no longer current.");
     });
 
-    it("denies moderation to authenticated non-moderators", async () => {
+    it("ignores browser-supplied authority and denies authenticated non-moderators", async () => {
         const form = new FormData();
         form.set("intent", "approve-review");
         form.set("id", "d9428888-122b-4b1f-bad6-3c3fb13b14da");
+        form.set("ownerKey", "moderator");
+        form.set("isModerator", "true");
         expect(await moderateContent(null, form)).toMatch(/not authorized/);
         expect(mocks.moderate).not.toHaveBeenCalled();
     });

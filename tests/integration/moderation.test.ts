@@ -53,6 +53,10 @@ describe("reviews, reports, and moderation", () => {
     it("keeps pending reviews private and blocks guests and other accounts", async () => {
         const created = await saveOwnReview(saved, owner, spaces[0].slug, 4, "This pending review contains enough useful detail.");
         expect(created).not.toBeNull();
+        await saveOwnReview(saved, owner, spaces[0].slug, 5, "This permitted edit keeps the original review identity.");
+        expect(await getOwnReview(saved, owner, spaces[0].id)).toMatchObject({
+            id: created!.id, rating: 5, body: "This permitted edit keeps the original review identity.", status: "PENDING",
+        });
         expect(await listApprovedReviews(discovery, spaces[0].id)).toEqual([]);
         expect(await getOwnReview(saved, stranger, spaces[0].id)).toBeNull();
         const changed = await withPrivateContext(saved, stranger, false, (tx) => tx.review.updateMany({
@@ -60,8 +64,14 @@ describe("reviews, reports, and moderation", () => {
         }));
         expect(changed.count).toBe(0);
         await expect(withPrivateContext(saved, owner, false, (tx) => tx.review.updateMany({
+            where: { id: created!.id }, data: { studySpaceId: spaces[2].id },
+        }))).rejects.toThrow();
+        await expect(withPrivateContext(saved, owner, false, (tx) => tx.review.updateMany({
             where: { id: created!.id }, data: { studySpaceId: spaces[3].id },
         }))).rejects.toThrow();
+        await expect(admin.review.update({
+            where: { id: created!.id }, data: { ownerKey: stranger },
+        })).rejects.toThrow();
         await expect(discovery.review.create({ data: {
             ownerKey: owner, studySpaceId: spaces[0].id, rating: 5, body: "Guest insertion should never be accepted.",
         } })).rejects.toThrow();
@@ -71,9 +81,15 @@ describe("reviews, reports, and moderation", () => {
         const review = await getOwnReview(saved, owner, spaces[0].id);
         expect(review).not.toBeNull();
         expect(await moderateReview(saved, nonModerator, review!.id, "approve")).toBe(false);
+        expect(await listModerationQueue(saved, nonModerator)).toBeNull();
         expect(await moderateReview(saved, moderator, review!.id, "approve")).toBe(true);
         expect(await moderateReview(saved, moderator, review!.id, "reject")).toBe(false);
         expect(await listApprovedReviews(discovery, spaces[0].id)).toHaveLength(1);
+
+        await saveOwnReview(saved, owner, spaces[0].slug, 4, "Editing an approved review temporarily removes it from public view.");
+        expect((await getOwnReview(saved, owner, spaces[0].id))?.status).toBe("PENDING");
+        expect(await listApprovedReviews(discovery, spaces[0].id)).toEqual([]);
+        expect(await moderateReview(saved, moderator, review!.id, "approve")).toBe(true);
         expect(await moderateReview(saved, moderator, review!.id, "hide")).toBe(true);
         expect(await listApprovedReviews(discovery, spaces[0].id)).toEqual([]);
 
@@ -85,7 +101,7 @@ describe("reviews, reports, and moderation", () => {
         const queue = await listModerationQueue(saved, moderator);
         expect(queue).not.toBeNull();
         const audit = await withPrivateContext(saved, moderator.ownerKey, true, (tx) => tx.moderationAction.findMany({ where: { reviewId: review!.id } }));
-        expect(audit.map(({ action }) => action)).toEqual(["REVIEW_APPROVED", "REVIEW_HIDDEN", "REVIEW_REJECTED"]);
+        expect(audit.map(({ action }) => action)).toEqual(["REVIEW_APPROVED", "REVIEW_APPROVED", "REVIEW_HIDDEN", "REVIEW_REJECTED"]);
     });
 
     it("keeps reports private and restricts resolution to moderators", async () => {

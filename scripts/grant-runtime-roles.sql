@@ -1,5 +1,8 @@
 -- Run as the migration owner after schema migrations, in each database.
 BEGIN;
+-- Run this as the same migration owner that creates application tables.
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM PUBLIC, studyspace_app, studyspace_saved;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC, studyspace_app, studyspace_saved;
 GRANT USAGE ON SCHEMA public TO studyspace_app, studyspace_saved;
 REVOKE ALL ON TABLE "Favorite", "AuthSession", "UserProfile", "Review", "UserReport", "ModerationAction" FROM PUBLIC, studyspace_app, studyspace_saved;
 REVOKE ALL ON TABLE "StudySpace", "Amenity", "StudySpaceAmenity" FROM PUBLIC, studyspace_app, studyspace_saved;

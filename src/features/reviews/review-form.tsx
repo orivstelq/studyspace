@@ -43,7 +43,11 @@ export function ReviewForm({ slug, review }: { slug: string; review: OwnReview }
                     rows={5}
                     className="mt-2 w-full rounded-lg border border-clay bg-paper px-4 py-3"
                 />
-                <p className="mt-2 text-xs text-muted">Edits are hidden until a moderator approves them.</p>
+                <p className="mt-2 text-xs text-muted">
+                    {review?.status === "APPROVED"
+                        ? "Submitting changes temporarily removes this review from public view until a moderator approves it again."
+                        : "New reviews and changes stay private until a moderator approves them."}
+                </p>
                 <button type="submit" disabled={pending} className="mt-4 min-h-11 rounded-lg bg-harbor px-4 py-3 font-semibold text-white disabled:opacity-60">
                     {pending ? "Submitting…" : review ? "Submit changes" : "Submit review"}
                 </button>

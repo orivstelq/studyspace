@@ -167,4 +167,6 @@ Use separate development and production databases.
 
 `UserProfile` is keyed by the same issuer-scoped owner hash as favorites. It stores an optional preferred category and up to five known amenity codes. A database check rejects unsupported or oversized preference sets, and row-level security prevents cross-owner reads and writes.
 
-`Review`, `UserReport`, and `ModerationAction` use role-specific PostgreSQL policies. The public role can read only approved reviews for published non-fixture listings. Owners can read and change only their own review, can insert reports without reading them back, and cannot use moderator policies. A transaction-local moderator flag is set only after trusted server-side role assignment.
+`Review`, `UserReport`, and `ModerationAction` use role-specific PostgreSQL policies. The public role can read only approved reviews for published non-fixture listings. Review owner and listing keys are immutable after insertion. Owners can read and edit only their own review, can insert reports without reading them back, and cannot use moderator policies through browser input. Editing an approved review returns the single stored row to pending and removes it from public reads until reapproved.
+
+The transaction-local moderator flag is set only after trusted server-side role assignment, but it remains an application-controlled database setting rather than an independently authenticated database role. The private runtime credential and server process are therefore part of the moderator trust boundary.

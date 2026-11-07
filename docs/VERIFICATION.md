@@ -24,12 +24,12 @@ These are user-reported manual results. They are intentionally separate from aut
 Review, report, and moderation milestone, local PostgreSQL, 2026-11-07:
 
 - Unit tests: 47 passed
-- PostgreSQL integration tests: 15 passed
+- PostgreSQL integration tests: 16 passed
 - ESLint: passed
 - TypeScript: passed through the production build
 - Production build: passed
 
-Automated coverage includes guest and cross-account denial, non-moderator denial, pending-review visibility, report privacy, valid review/report transitions, and moderation audit creation. These results do not replace the manual checks recorded above.
+Automated coverage includes guest and cross-account denial, browser-supplied moderator denial, pending-review visibility, report privacy, valid review/report transitions, immutable review ownership and listing associations, private default privileges for new tables, and moderation audit creation. These results do not replace the manual checks recorded above.
 
 Account identity coverage includes display-name preference, email fallback, invalid-label rejection, legacy sessions without labels, session expiration, and production type checking. Live two-account account-menu verification requires a connected browser and fresh sign-ins after the scope change.
 

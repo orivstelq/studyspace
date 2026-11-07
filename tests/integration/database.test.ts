@@ -93,6 +93,25 @@ describe("StudySpace PostgreSQL integration", () => {
         });
     });
 
+    it("keeps tables created by the migration owner private by default", async () => {
+        const tableName = `DefaultPrivilegeProbe_${randomUUID().replaceAll("-", "")}`;
+        const identifier = `"${tableName}"`;
+        await migrationPool.query(`CREATE TABLE ${identifier} ("id" INTEGER)`);
+
+        try {
+            const privileges = await migrationPool.query(
+                `SELECT
+                    has_table_privilege('studyspace_app', $1, 'SELECT') AS app_can_read,
+                    has_table_privilege('studyspace_saved', $1, 'SELECT') AS saved_can_read`,
+                [`public.${identifier}`],
+            );
+            expect(privileges.rows[0]).toEqual({ app_can_read: false, saved_can_read: false });
+            await expect(applicationPool.query(`SELECT * FROM ${identifier}`)).rejects.toMatchObject({ code: "42501" });
+        } finally {
+            await migrationPool.query(`DROP TABLE ${identifier}`);
+        }
+    });
+
     it("rejects invalid coordinates and published fixtures", async () => {
         const client = await migrationPool.connect();
 
