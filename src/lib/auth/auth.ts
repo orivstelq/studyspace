@@ -23,7 +23,14 @@ export function getAuthClient() {
         signInReturnToPath: "/saved",
         enableAccessTokenEndpoint: false,
         includeIdTokenHintInOIDCLogoutUrl: false,
-        session: { rolling: false, absoluteDuration: SESSION_DURATION },
+        session: {
+            rolling: false,
+            absoluteDuration: SESSION_DURATION,
+            cookie: {
+                sameSite: "lax",
+                secure: new URL(APP_BASE_URL).protocol === "https:",
+            },
+        },
         sessionStore: createSessionStore(),
     });
     return client;
