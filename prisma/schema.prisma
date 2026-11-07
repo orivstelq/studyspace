@@ -49,6 +49,7 @@ model StudySpace {
   updatedAt DateTime @updatedAt
 
   amenities StudySpaceAmenity[]
+  favorites Favorite[]
 
   @@index([status, category])
   @@index([city])
@@ -70,4 +71,28 @@ model StudySpaceAmenity {
   amenity    Amenity    @relation(fields: [amenityId], references: [id], onDelete: Cascade)
 
   @@id([studySpaceId, amenityId])
+}
+
+model Favorite {
+  ownerKey     String   @db.VarChar(64)
+  studySpaceId String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  studySpace StudySpace @relation(fields: [studySpaceId], references: [id], onDelete: Cascade)
+
+  @@id([ownerKey, studySpaceId])
+  @@index([ownerKey, createdAt, studySpaceId])
+  @@index([studySpaceId])
+}
+
+model AuthSession {
+  id        String   @id @db.VarChar(32)
+  subject   String   @db.VarChar(255)
+  providerSessionId String @db.VarChar(255)
+  createdAt Int
+  expiresAt DateTime
+
+  @@index([subject])
+  @@index([providerSessionId])
+  @@index([expiresAt])
 }

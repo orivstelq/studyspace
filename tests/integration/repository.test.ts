@@ -197,8 +197,6 @@ describe("Published study spaces repository", () => {
             expect((await queryPublishedSpaces(prisma, { ...filters, category: "cafe" })).spaces).toEqual([]);
             expect((await queryPublishedSpaces(prisma, { ...filters, amenity: "wifi" })).spaces).toEqual([]);
 
-            // The dedicated test DB should contain only our
-            // temporary records for this test.
             expect(results).toHaveLength(20);
 
             const expectedNames = records

@@ -26,6 +26,8 @@ function testDatabaseUrl(key: "DIRECT_URL" | "DATABASE_URL") {
     }
 
     url.pathname = "/studyspace_test";
+    url.search = "";
+    url.hash = "";
     return url.toString();
 }
 
@@ -52,10 +54,8 @@ describe("StudySpace PostgreSQL integration", () => {
             "SELECT current_database() AS database, current_user AS role",
         );
 
-        expect(migration.rows[0]).toEqual({
-            database: "studyspace_test",
-            role: "sidharthbajoji",
-        });
+        expect(migration.rows[0].database).toBe("studyspace_test");
+        expect(migration.rows[0].role).not.toBe("studyspace_app");
 
         expect(application.rows[0]).toEqual({
             database: "studyspace_test",

@@ -3,6 +3,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { FavoriteButton } from "@/features/favorites/favorite-button";
+import { hasFavorite } from "@/features/favorites/query";
+import { getAuthClient, getFavoriteOwner } from "@/lib/auth/auth";
+import { privateDatabase } from "@/lib/db/private-client";
 
 import { publicSourceUrl, sourceLabels } from "@/features/discovery/provenance";
 import { mapDatabaseSpace } from "@/features/discovery/map-record";
@@ -22,6 +26,15 @@ export const metadata: Metadata = {
         follow: false,
     },
 };
+
+async function FavoriteControl({ id, slug, name }: { id: string; slug: string; name: string }) {
+    if (!getAuthClient()) return null;
+    const owner = await getFavoriteOwner();
+    if (!owner) {
+        return <a href="/auth/login" className="inline-flex min-h-11 items-center font-semibold text-harbor underline">Sign in to save</a>;
+    }
+    return <FavoriteButton slug={slug} name={name} saved={await hasFavorite(privateDatabase(), owner, id)} />;
+}
 
 async function SpaceDetailsContent({
     params,
@@ -58,6 +71,11 @@ async function SpaceDetailsContent({
                 <p className="mt-4 text-muted">
                     {[record.address, space.city, space.region].filter(Boolean).join(", ")}
                 </p>
+                <div className="mt-4">
+                    <Suspense fallback={null}>
+                        <FavoriteControl id={space.id} slug={space.slug} name={space.name} />
+                    </Suspense>
+                </div>
             </div>
 
             <div className="mt-10 grid gap-8 md:grid-cols-[2fr_1fr]">
