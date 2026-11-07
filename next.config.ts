@@ -1,16 +1,15 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "./src/lib/security/headers";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     return [{
       source: "/:path*",
-      headers: [
-        { key: "Content-Security-Policy", value: "base-uri 'self'; object-src 'none'; frame-ancestors 'none'" },
-        { key: "X-Content-Type-Options", value: "nosniff" },
-        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-      ],
+      headers: securityHeaders({
+        development: process.env.NODE_ENV === "development",
+        appBaseUrl: process.env.APP_BASE_URL,
+      }),
     }];
   },
   cacheComponents: true,

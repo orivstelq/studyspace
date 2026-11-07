@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { getAuthIdentity } from "@/lib/auth/auth";
 import { privateDatabase } from "@/lib/db/private-client";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
 import { moderateReview, resolveReport, saveOwnReview, submitContentReport, withdrawOwnReview } from "./query";
 import { parseReport, parseReview, validSlug, validUuid } from "./validation";
 
@@ -30,6 +31,9 @@ export async function updateReview(_previousMessage: string | null, form: FormDa
         if (intent !== "submit") return "This review could not be updated.";
         const review = parseReview(form);
         if (!review) return "Add a rating and 20–2,000 characters of review text.";
+        if (!(await enforceRateLimit(RATE_LIMITS.reviewSubmission, identity.ownerKey)).allowed) {
+            return "Too many review updates. Try again later.";
+        }
         if (!await saveOwnReview(privateDatabase(), identity.ownerKey, review.slug, review.rating, review.body)) {
             return "This listing is no longer available for reviews.";
         }
@@ -50,6 +54,9 @@ export async function submitReport(_previousMessage: string | null, form: FormDa
     if (!report) return "Choose a reason and provide 10–1,000 characters when adding details.";
 
     try {
+        if (!(await enforceRateLimit(RATE_LIMITS.reportSubmission, identity.ownerKey)).allowed) {
+            return "Too many reports submitted. Try again later.";
+        }
         if (!await submitContentReport(privateDatabase(), identity.ownerKey, report.target, report.reason, report.details)) {
             return "This content is no longer available to report.";
         }
@@ -73,6 +80,9 @@ export async function moderateContent(_previousMessage: string | null, form: For
     const id = form.get("id");
     if (!validUuid(id)) return "This moderation request is invalid.";
     try {
+        if (!(await enforceRateLimit(RATE_LIMITS.moderationMutation, identity.ownerKey)).allowed) {
+            return "Too many moderation updates. Try again later.";
+        }
         const changed = intent === "resolve-report"
             ? await resolveReport(privateDatabase(), identity, id)
             : intent === "approve-review" || intent === "reject-review" || intent === "hide-review"

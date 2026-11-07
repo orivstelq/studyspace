@@ -14,7 +14,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -38,6 +38,8 @@ jobs:
       DATABASE_URL: postgresql://studyspace_app:ci-app-password@localhost:5432/studyspace_dev
       FAVORITES_DATABASE_URL: postgresql://studyspace_saved:ci-saved-password@localhost:5432/studyspace_dev
       APP_BASE_URL: http://localhost:3000
+      RATE_LIMIT_SECRET: ci-only-rate-limit-secret-with-at-least-32-characters
+      TRUSTED_CLIENT_IP_SOURCE: shared
 
     steps:
       - name: Check out repository
@@ -61,6 +63,8 @@ jobs:
           CREATE ROLE studyspace_app LOGIN PASSWORD 'ci-app-password'
             NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
           CREATE ROLE studyspace_saved LOGIN PASSWORD 'ci-saved-password'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+          CREATE ROLE studyspace_maintenance NOLOGIN
             NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
           CREATE DATABASE studyspace_dev;
           CREATE DATABASE studyspace_test;
@@ -89,6 +93,15 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Load deterministic browser-test listings
+        run: psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f prisma/data/san-marcos.sql
+
+      - name: Public end-to-end tests
+        run: npm run test:e2e
 
       - name: Dependency security audit
         run: npm audit

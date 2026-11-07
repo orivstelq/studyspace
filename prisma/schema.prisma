@@ -194,3 +194,12 @@ model ModerationAction {
   @@index([reviewId, createdAt])
   @@index([reportId, createdAt])
 }
+
+model RateLimitBucket {
+  key       String   @id @db.VarChar(64)
+  count     Int
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
