@@ -1,7 +1,38 @@
 
 import { describe, expect, it } from "vitest";
 import { developmentSpaces } from "./fixtures";
-import { filterStudySpaces } from "./search";
+import { filterStudySpaces, findStudySpaceBySlug, } from "./search";
+
+
+describe("findStudySpaceBySlug", () => {
+    it("finds a space by its exact slug", () => {
+        const result = findStudySpaceBySlug(
+            developmentSpaces,
+            "the-reading-room",
+        );
+
+        expect(result?.name).toBe("The Reading Room");
+    });
+
+    it("returns undefined for an unknown slug", () => {
+        const result = findStudySpaceBySlug(
+            developmentSpaces,
+            "does-not-exist",
+        );
+
+        expect(result).toBeUndefined();
+    });
+
+    it("does not accept a partial slug", () => {
+        const result = findStudySpaceBySlug(
+            developmentSpaces,
+            "reading-room",
+        );
+
+        expect(result).toBeUndefined();
+    });
+});
+
 
 describe("filterStudySpaces", () => {
     it("returns all spaces when no filters are applied", () => {

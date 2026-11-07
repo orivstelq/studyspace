@@ -39,3 +39,10 @@ export function filterStudySpaces(
         );
     });
 }
+
+export function findStudySpaceBySlug(
+    spaces: readonly StudySpace[],
+    slug: string,
+): StudySpace | undefined {
+    return spaces.find((space) => space.slug === slug);
+}
