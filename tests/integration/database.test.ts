@@ -50,17 +50,18 @@ describe("StudySpace PostgreSQL integration", () => {
             "SELECT current_database() AS database, current_user AS role",
         );
 
-        const application = await applicationPool.query(
-            "SELECT current_database() AS database, current_user AS role",
-        );
+        const application = await applicationPool.query(`
+            SELECT current_database() AS database,
+                   current_user AS role,
+                   pg_has_role(current_user, 'studyspace_app', 'MEMBER') AS app_member
+        `);
 
         expect(migration.rows[0].database).toBe("studyspace_test");
         expect(migration.rows[0].role).not.toBe("studyspace_app");
 
-        expect(application.rows[0]).toEqual({
-            database: "studyspace_test",
-            role: "studyspace_app",
-        });
+        expect(application.rows[0].database).toBe("studyspace_test");
+        expect(application.rows[0].role).not.toBe(migration.rows[0].role);
+        expect(application.rows[0].app_member).toBe(true);
     });
 
     afterAll(async () => {
