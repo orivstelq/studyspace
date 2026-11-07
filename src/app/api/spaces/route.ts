@@ -1,4 +1,5 @@
 import { parseDirectoryParams, PAGE_SIZE } from "@/features/discovery/directory-params";
+import { publicSourceUrl } from "@/features/discovery/provenance";
 import { listPublishedSpaces } from "@/features/discovery/repository";
 
 const headers = { "Cache-Control": "no-store" };
@@ -21,8 +22,12 @@ export async function GET(request: Request) {
 
     try {
         const { spaces, hasNext } = await listPublishedSpaces(filters);
+        const data = spaces.map((space) => {
+            const sourceUrl = publicSourceUrl(space.sourceUrl);
+            return { ...space, sourceUrl, verifiedAt: sourceUrl ? space.verifiedAt : null };
+        });
         return Response.json(
-            { data: spaces, count: spaces.length, page: filters.page, pageSize: PAGE_SIZE, hasNext },
+            { data, count: spaces.length, page: filters.page, pageSize: PAGE_SIZE, hasNext },
             { headers },
         );
     } catch (error) {

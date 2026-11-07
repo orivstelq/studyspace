@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { publicSourceUrl, sourceLabels } from "@/features/discovery/provenance";
 import { mapDatabaseSpace } from "@/features/discovery/map-record";
 import { getPublishedSpaceBySlug } from "@/features/discovery/repository";
 
@@ -34,9 +35,10 @@ async function SpaceDetailsContent({
     }
 
     const space = mapDatabaseSpace(record);
+    const sourceUrl = publicSourceUrl(record.sourceUrl);
 
     return (
-        <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
+        <main className="mx-auto max-w-5xl wrap-anywhere px-5 py-12 sm:px-8">
             <Link
                 href="/explore"
                 className="text-sm font-semibold text-harbor hover:underline"
@@ -54,7 +56,7 @@ async function SpaceDetailsContent({
                 </h1>
 
                 <p className="mt-4 text-muted">
-                    {space.city}, {space.region}
+                    {[record.address, space.city, space.region].filter(Boolean).join(", ")}
                 </p>
             </div>
 
@@ -96,32 +98,28 @@ async function SpaceDetailsContent({
                     </h2>
 
                     <p className="mt-4 text-sm leading-7 text-muted">
-                        This listing is published in the StudySpace
-                        directory. Availability and amenities may
-                        change; confirm important details before visiting.
+                        Source checks cover the details shown here. Check the listing source for current hours and access rules.
                     </p>
 
                     <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-harbor">
-                        Status
+                        Source
                     </p>
-
                     <p className="mt-1 text-sm text-ink">
-                        Published
+                        {sourceUrl ? (
+                            <a href={sourceUrl} rel="noreferrer" className="text-harbor underline underline-offset-4">
+                                {sourceLabels[record.sourceType]}
+                            </a>
+                        ) : sourceLabels[record.sourceType]}
                     </p>
-
                     <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-harbor">
-                        Last verified
+                        Last source check
                     </p>
-
                     <p className="mt-1 text-sm text-ink">
-                        {record.verifiedAt
-                            ? new Intl.DateTimeFormat("en-US", {
-                                year: "numeric",
-                                month: "long",
-                                day: "numeric",
-                                timeZone: "UTC",
-                            }).format(record.verifiedAt)
-                            : "Not yet verified"}
+                        {space.verifiedAt ? (
+                            <time dateTime={space.verifiedAt}>
+                                {new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" }).format(new Date(space.verifiedAt))}
+                            </time>
+                        ) : "Not yet verified"}
                     </p>
                 </aside>
             </div>

@@ -1,4 +1,5 @@
 
+import { publicSourceUrl } from "./provenance";
 import type { StudySpace, Amenity } from "./types";
 import { AMENITIES } from "./types";
 import type { queryPublishedSpaces } from "./query";
@@ -34,5 +35,6 @@ export function mapDatabaseSpace(
         region: space.region,
         amenities,
         source: "published",
+        verifiedAt: publicSourceUrl(space.sourceUrl) ? space.verifiedAt?.toISOString() ?? null : null,
     };
 }

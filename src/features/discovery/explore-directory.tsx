@@ -166,9 +166,7 @@ export function ExploreDirectory({ spaces, filters, hasNext }: ExploreDirectoryP
                                     </span>
 
                                     <span className="text-xs text-muted">
-                                        {space.source === "published"
-                                            ? "Published"
-                                            : "Demo only"}
+                                        {space.verifiedAt ? "Source checked" : "Unverified"}
                                     </span>
                                 </div>
 

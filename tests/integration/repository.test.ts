@@ -77,6 +77,9 @@ describe("Published study spaces repository", () => {
                 category: "LIBRARY",
                 city: "Test City",
                 region: "Test Region",
+                address: null,
+                sourceType: "OFFICIAL",
+                sourceUrl: null,
                 verifiedAt: null,
                 amenities: [],
             });

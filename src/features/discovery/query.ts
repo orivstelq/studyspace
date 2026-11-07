@@ -13,6 +13,9 @@ export const publishedSpaceSelect = {
     category: true,
     city: true,
     region: true,
+    address: true,
+    sourceType: true,
+    sourceUrl: true,
     verifiedAt: true,
     amenities: {
         select: {
