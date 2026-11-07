@@ -163,3 +163,9 @@ Use separate development and production databases.
 - Invalid records are rejected
 - Integration tests exercise real PostgreSQL behavior
 - Application builds without client-side database secrets
+
+## Implemented private tables
+
+`Favorite` is keyed by a hash of the configured issuer domain and authenticated subject, together with the study space UUID. The composite key makes repeated saves idempotent. Deleting a study space cascades to favorites. Archived spaces are hidden from Saved while their bookmarks remain stored. PostgreSQL row-level security matches the owner against a transaction-local setting.
+
+`AuthSession` stores the SDK session identifier, provider subject, provider session identifier, creation time, and expiry. The data supports expiry enforcement, sign-out, and provider-initiated revocation without persisting provider tokens. Runtime grants are applied separately from Prisma migrations.

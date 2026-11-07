@@ -271,3 +271,10 @@ until:
 - Known vulnerabilities are reviewed
 - Deployment secrets are configured securely
 - The feature's threat model is updated
+
+## Current implementation notes
+
+- Saved mutations use the framework's same-origin protection and verify the request origin against the configured application URL. The server derives the favorite owner from the Auth0 session.
+- Favorite access uses an explicit owner predicate and a PostgreSQL policy with transaction-local owner context. The Saved runtime role is trusted to set that context. The directory role has no access to private tables.
+- Auth0 provides the login flow and cookie cryptography. Sessions are capped at eight hours and invalidated by deleting the server-side session. Configure the provider and proxy for HTTPS, and set production edge limits for login and directory search before a public launch.
+- Basic security headers apply to all routes. Production HTTPS termination should enforce HSTS. A strict script policy and deployment-specific rate limits remain release checks.

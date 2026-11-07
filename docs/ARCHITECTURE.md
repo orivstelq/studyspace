@@ -247,3 +247,9 @@ Require:
 - Database backups
 - Migration process
 - Monitoring and error reporting
+
+## Implemented directory and Saved flow
+
+Explore and the public list API share validation and a bounded, parameterized Prisma query. Detail reads share the published-only predicate and an explicit public field selection. Source URLs must be HTTPS and a listing needs a review timestamp before displaying a source-check badge.
+
+Saved uses Auth0 OpenID Connect and a PostgreSQL session store. Server actions validate the request origin and resolve the owner from the verified session. Favorites and sessions use a dedicated runtime connection. Public reads retain their separate read-only role. See the README for setup and the listing review guide for the starter dataset.

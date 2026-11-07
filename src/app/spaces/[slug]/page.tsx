@@ -29,11 +29,16 @@ export const metadata: Metadata = {
 
 async function FavoriteControl({ id, slug, name }: { id: string; slug: string; name: string }) {
     if (!getAuthClient()) return null;
-    const owner = await getFavoriteOwner();
-    if (!owner) {
-        return <a href="/auth/login" className="inline-flex min-h-11 items-center font-semibold text-harbor underline">Sign in to save</a>;
+    try {
+        const owner = await getFavoriteOwner();
+        if (!owner) {
+            return <a href="/auth/login" className="inline-flex min-h-11 items-center font-semibold text-harbor underline">Sign in to save</a>;
+        }
+        return <FavoriteButton slug={slug} name={name} saved={await hasFavorite(privateDatabase(), owner, id)} />;
+    } catch (error) {
+        console.error("Saved state unavailable:", error instanceof Error ? error.name : "Unknown error");
+        return <p className="text-sm text-muted">Saving is temporarily unavailable.</p>;
     }
-    return <FavoriteButton slug={slug} name={name} saved={await hasFavorite(privateDatabase(), owner, id)} />;
 }
 
 async function SpaceDetailsContent({
@@ -51,7 +56,7 @@ async function SpaceDetailsContent({
     const sourceUrl = publicSourceUrl(record.sourceUrl);
 
     return (
-        <main className="mx-auto max-w-5xl wrap-anywhere px-5 py-12 sm:px-8">
+        <main id="main-content" className="mx-auto w-full max-w-5xl wrap-anywhere px-5 py-12 sm:px-8">
             <Link
                 href="/explore"
                 className="text-sm font-semibold text-harbor hover:underline"
@@ -152,6 +157,7 @@ export default function SpaceDetailsPage({
         <Suspense
             fallback={
                 <main
+                    id="main-content"
                     role="status"
                     className="mx-auto max-w-5xl px-5 py-12 text-muted sm:px-8"
                 >

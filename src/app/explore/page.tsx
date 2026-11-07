@@ -31,7 +31,7 @@ async function PublishedSpacesDirectory({ searchParams }: Pick<PageProps<"/explo
 
 export default function ExplorePage({ searchParams }: PageProps<"/explore">) {
     return (
-        <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
+        <main id="main-content" className="mx-auto w-full max-w-6xl px-5 py-12 sm:px-8">
             <div className="mb-10 max-w-2xl">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-harbor">
                     Discover your next study spot

@@ -3,7 +3,7 @@ import "server-only";
 
 import type { DirectoryFilters } from "./directory-params";
 import { cache } from "react";
-import { prisma } from "@/lib/db/client";
+import { publicDatabase } from "@/lib/db/client";
 
 import {
     queryPublishedSpaces,
@@ -11,11 +11,12 @@ import {
 } from "./query";
 
 export async function listPublishedSpaces(filters: DirectoryFilters) {
-    return queryPublishedSpaces(prisma, filters);
+    return queryPublishedSpaces(publicDatabase(), filters);
 }
 
 export const getPublishedSpaceBySlug = cache(
     async (slug: string) => {
-        return queryPublishedSpaceBySlug(prisma, slug);
+        if (slug.length > 160 || /[\p{Cc}]/u.test(slug)) return null;
+        return queryPublishedSpaceBySlug(publicDatabase(), slug);
     },
 );
