@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export default function HomePage() {
   return (
-    <main>
+    <main id="main-content">
       <section className="mx-auto grid max-w-6xl gap-12 px-5 py-16 sm:px-8 md:grid-cols-2 md:items-center md:py-24">
         <div>
           <p className="mb-5 text-xs font-semibold uppercase tracking-[0.18em] text-harbor">
