@@ -58,3 +58,23 @@ The following checks still require a production-like deployment, provider config
 - Authenticated Playwright execution with an ignored environment-local storage state
 - End-to-end moderator testing with live moderator and non-moderator accounts, covering approve, reject, hide, report resolution, and audit records
 - A rehearsed application rollback and isolated point-in-time database restore
+
+## Phase 3 staging preparation
+
+Local verification, 2026-11-07:
+
+- ESLint: passed
+- TypeScript: passed (`next typegen` and `tsc --noEmit`)
+- Unit tests: 63 passed
+- PostgreSQL integration tests: 20 passed against the existing local PostgreSQL 17 test database
+- Production build: passed
+- Public Playwright tests: 4 passed in local Chromium, including signed-out private pages and responsive checks at 390 px and 1440 px
+- Dependency audit: 0 known vulnerabilities
+- Staging verifier: JavaScript syntax and `--help` path passed; no deployed HTTPS staging origin exists, so live checks were not run
+- Authenticated Playwright discovery: 5 real-session cases listed successfully when placeholder ignored paths were supplied; none were executed or counted as passed
+
+The first sandboxed integration attempt was denied loopback access with `EPERM`; the identical suite passed after local PostgreSQL access was allowed. No test or migration was run against Neon. No Vercel project or Auth0 setting was changed. The connected browser list was empty, so live Auth0 session testing remains pending.
+
+Pull-request CI now requests PostgreSQL 18, validates the server major version, uses separate LOGIN and NOLOGIN permission roles with PostgreSQL 18 membership options, and runs all committed migrations and integration tests. This is not yet a successful PostgreSQL 18 result: the result must be recorded from PR #3 GitHub Actions after push.
+
+The full live-cloud evidence requirements are tracked in `docs/STAGING_CHECKLIST.md`. In particular, Neon PostgreSQL 18.6 catalog/role/RLS validation, the public HTTPS verifier, Vercel forwarded-header behavior, real-session two-account/moderator workflows, backup restore, connection load, cleanup scheduling, monitoring, and rollback remain `NOT RUN`.

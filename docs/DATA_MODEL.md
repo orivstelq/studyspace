@@ -172,3 +172,7 @@ Use separate development and production databases.
 The transaction-local moderator flag is set only after trusted server-side role assignment, but it remains an application-controlled database setting rather than an independently authenticated database role. The private runtime credential and server process are therefore part of the moderator trust boundary.
 
 `RateLimitBucket` stores one atomic fixed-window counter per scoped HMAC key. It contains no raw account subject or client address. Only the private runtime role can read or mutate counters; the public directory role has no table privilege. A security-definer cleanup function deletes bounded, ordered batches more than one day after reset. Its maintenance role can execute the function but has no table access.
+
+## Staging ownership invariants
+
+On Neon staging, `neondb_owner` applies every committed migration and owns all application relations and functions. Runtime access is granted to three NOLOGIN permission roles. Separate environment-specific LOGIN identities inherit exactly one permission role and cannot use `SET ROLE`, delegate membership, bypass RLS, create databases/roles, or own application objects. The public database connection cannot read account, session, report, moderation, or rate-limit storage. See `docs/STAGING.md` for the catalog assertions and provisioning order.

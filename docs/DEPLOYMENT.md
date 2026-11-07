@@ -4,7 +4,7 @@ Status: proposed for Phase 2. Nothing in this document authorizes a deployment o
 
 ## Decision
 
-Use Vercel for the Next.js 16 application and Neon PostgreSQL in the same region. This is the smallest operational surface that preserves the framework runtime, managed TLS, preview deployments, PostgreSQL 17, connection pooling, backups, and horizontal application scaling.
+Use Vercel for the Next.js 16 application and Neon PostgreSQL in the same region. This is the smallest operational surface that preserves the framework runtime, managed TLS, preview deployments, PostgreSQL 18, connection pooling, backups, and horizontal application scaling. The existing Phase 3 staging design is specified separately in `docs/STAGING.md`.
 
 - Vercel is the first-party Next.js host and supplies immutable deployments, managed HTTPS, health-based rollout, and rollback. Its Hobby plan is for personal/non-commercial use; a commercial production launch must budget for an eligible plan.
 - Neon supplies pooled and direct PostgreSQL endpoints, scale-to-zero development branches, and point-in-time restore. Production must use a paid retention window chosen from the business recovery requirements; the free tier is suitable for evaluation, not an assumed backup policy.
@@ -14,7 +14,7 @@ Keep the application and database in the same supported region. Block direct acc
 
 ## Runtime and build
 
-- Node.js 24, Next.js 16, Prisma 7, PostgreSQL 17.
+- Node.js 24, Next.js 16, Prisma 7, PostgreSQL 18.
 - Build: `npm ci`, `npx prisma generate`, `npm run build`.
 - Runtime: the platform-provided Next.js server. Do not expose Prisma or database URLs to browser bundles.
 - Health/smoke checks: `/`, `/explore`, one known published listing, and `/api/spaces`.
@@ -80,7 +80,10 @@ Provision the group role before migrations using a database administrator, then 
 CREATE ROLE studyspace_maintenance NOLOGIN
   NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 CREATE ROLE studyspace_cleanup LOGIN PASSWORD '<generated-secret>'
-  NOSUPERUSER NOCREATEDB NOCREATEROLE IN ROLE studyspace_maintenance;
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+GRANT studyspace_maintenance TO studyspace_cleanup WITH INHERIT TRUE;
+GRANT studyspace_maintenance TO studyspace_cleanup WITH SET FALSE;
+GRANT studyspace_maintenance TO studyspace_cleanup WITH ADMIN FALSE;
 ```
 
 The maintenance role has schema usage and execution of `cleanup_expired_rate_limit_buckets(integer)` only. It cannot select, insert, update, or directly delete rate-limit rows. The security-definer function removes only buckets whose reset time is more than one day old, orders work by expiry, uses `SKIP LOCKED`, and rejects batch sizes outside 1–10,000.
