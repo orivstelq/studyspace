@@ -18,7 +18,7 @@ export default function ExploreError({
         <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
             <div className="rounded-2xl border border-clay bg-white p-8 text-center sm:p-12">
                 <h1 className="text-2xl font-semibold">
-                    We couldn't load study spaces
+                    We couldn&apos;t load study spaces
                 </h1>
 
                 <p className="mt-3 text-muted">
