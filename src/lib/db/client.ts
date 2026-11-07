@@ -25,9 +25,10 @@ function createPrismaClient(): PrismaClient {
     return new PrismaClient({ adapter });
 }
 
-export const prisma =
-    globalForPrisma.prisma ?? createPrismaClient();
+let client = globalForPrisma.prisma;
 
-if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.prisma = prisma;
+export function publicDatabase() {
+    client ??= createPrismaClient();
+    if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
+    return client;
 }

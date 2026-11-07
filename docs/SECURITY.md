@@ -271,3 +271,17 @@ until:
 - Known vulnerabilities are reviewed
 - Deployment secrets are configured securely
 - The feature's threat model is updated
+
+## Current implementation notes
+
+- Saved mutations use the framework's same-origin protection and verify the request origin against the configured application URL. The server derives the favorite owner from the Auth0 session.
+- Favorite access uses an explicit owner predicate and a PostgreSQL policy with transaction-local owner context. The Saved runtime role is trusted to set that context. The directory role has no access to private tables.
+- Profile reads and writes use the same verified owner context. Server and database validation limit preferences to public category and amenity values, and row-level security prevents cross-owner access.
+- Moderator status comes from an exact Auth0 subject allowlist in the server environment. Every admin page load and moderation action re-verifies the session; browser-supplied roles, owner keys, and PostgreSQL-setting values are ignored.
+- `studyspace.is_moderator` is a transaction-local setting controlled by trusted application code using the `studyspace_saved` connection. It is not an independently authenticated database role and does not protect against compromise of that runtime credential or server process. If that stronger boundary becomes necessary, use a separate least-privilege moderator database role and connection after a dedicated design review.
+- Review policies separate owner drafts from approved public DTOs. Editing an approved review changes that row to pending and temporarily removes it from public view; the MVP does not retain a separately published prior version. Withdrawals are non-destructive, and invalid status transitions fail without an audit row. A trigger prevents owner and listing reassignment after creation.
+- Report insertion returns no identifier because submitters have no report read policy. Moderators alone can read and resolve reports. Successful moderation and resolution writes an immutable `ModerationAction` row in the same transaction.
+- Auth0 provides the login flow and cookie cryptography. Sessions are capped at eight hours and invalidated by deleting the server-side session. Configure the provider and proxy for HTTPS, and set production edge limits for login and directory search before a public launch.
+- Account labels come only from the verified Auth0 session. The app requests `profile` and `email`, resolves one bounded display label, and stores no separate email/name fields or provider tokens. Header and Profile read it in uncached server components; public reviews and shared caches never receive it.
+- Basic security headers apply to all routes. Production HTTPS termination should enforce HSTS. A strict script policy and deployment-specific rate limits remain release checks.
+- The runtime-grant script must run as the table-creating migration owner. It revokes default runtime access to future tables so every new public or private table requires an explicit grant.

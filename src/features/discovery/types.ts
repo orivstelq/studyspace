@@ -30,6 +30,7 @@ export interface StudySpace {
     region: string;
     amenities: Amenity[];
     source: "development-fixture" | "published";
+    verifiedAt?: string | null;
 }
 
 export interface SearchFilters {

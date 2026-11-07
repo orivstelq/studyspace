@@ -3,9 +3,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { FavoriteButton } from "@/features/favorites/favorite-button";
+import { hasFavorite } from "@/features/favorites/query";
+import { getAuthClient, getFavoriteOwner } from "@/lib/auth/auth";
+import { privateDatabase } from "@/lib/db/private-client";
 
+import { publicSourceUrl, sourceLabels } from "@/features/discovery/provenance";
 import { mapDatabaseSpace } from "@/features/discovery/map-record";
 import { getPublishedSpaceBySlug } from "@/features/discovery/repository";
+import { CommunityReviews } from "@/features/reviews/community-reviews";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
@@ -22,6 +28,25 @@ export const metadata: Metadata = {
     },
 };
 
+async function FavoriteControl({ id, slug, name }: { id: string; slug: string; name: string }) {
+    if (!getAuthClient()) return null;
+    let owner: string | null;
+    let saved: boolean;
+
+    try {
+        owner = await getFavoriteOwner();
+        saved = owner ? await hasFavorite(privateDatabase(), owner, id) : false;
+    } catch (error) {
+        console.error("Saved state unavailable:", error instanceof Error ? error.name : "Unknown error");
+        return <p className="text-sm text-muted">Saving is temporarily unavailable.</p>;
+    }
+
+    if (!owner) {
+        return <a href="/auth/login" className="inline-flex min-h-11 items-center font-semibold text-harbor underline">Sign in to save</a>;
+    }
+    return <FavoriteButton slug={slug} name={name} saved={saved} />;
+}
+
 async function SpaceDetailsContent({
     params,
 }: PageProps) {
@@ -34,9 +59,10 @@ async function SpaceDetailsContent({
     }
 
     const space = mapDatabaseSpace(record);
+    const sourceUrl = publicSourceUrl(record.sourceUrl);
 
     return (
-        <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
+        <main id="main-content" className="mx-auto w-full max-w-5xl wrap-anywhere px-5 py-12 sm:px-8">
             <Link
                 href="/explore"
                 className="text-sm font-semibold text-harbor hover:underline"
@@ -54,8 +80,13 @@ async function SpaceDetailsContent({
                 </h1>
 
                 <p className="mt-4 text-muted">
-                    {space.city}, {space.region}
+                    {[record.address, space.city, space.region].filter(Boolean).join(", ")}
                 </p>
+                <div className="mt-4">
+                    <Suspense fallback={null}>
+                        <FavoriteControl id={space.id} slug={space.slug} name={space.name} />
+                    </Suspense>
+                </div>
             </div>
 
             <div className="mt-10 grid gap-8 md:grid-cols-[2fr_1fr]">
@@ -96,35 +127,34 @@ async function SpaceDetailsContent({
                     </h2>
 
                     <p className="mt-4 text-sm leading-7 text-muted">
-                        This listing is published in the StudySpace
-                        directory. Availability and amenities may
-                        change; confirm important details before visiting.
+                        Source checks cover the details shown here. Check the listing source for current hours and access rules.
                     </p>
 
                     <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-harbor">
-                        Status
+                        Source
                     </p>
-
                     <p className="mt-1 text-sm text-ink">
-                        Published
+                        {sourceUrl ? (
+                            <a href={sourceUrl} rel="noreferrer" className="text-harbor underline underline-offset-4">
+                                {sourceLabels[record.sourceType]}
+                            </a>
+                        ) : sourceLabels[record.sourceType]}
                     </p>
-
                     <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-harbor">
-                        Last verified
+                        Last source check
                     </p>
-
                     <p className="mt-1 text-sm text-ink">
-                        {record.verifiedAt
-                            ? new Intl.DateTimeFormat("en-US", {
-                                year: "numeric",
-                                month: "long",
-                                day: "numeric",
-                                timeZone: "UTC",
-                            }).format(record.verifiedAt)
-                            : "Not yet verified"}
+                        {space.verifiedAt ? (
+                            <time dateTime={space.verifiedAt}>
+                                {new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" }).format(new Date(space.verifiedAt))}
+                            </time>
+                        ) : "Not yet verified"}
                     </p>
                 </aside>
             </div>
+            <Suspense fallback={<p role="status" className="mt-10 text-muted">Loading community reviews…</p>}>
+                <CommunityReviews studySpaceId={space.id} slug={space.slug} />
+            </Suspense>
         </main>
     );
 }
@@ -136,6 +166,7 @@ export default function SpaceDetailsPage({
         <Suspense
             fallback={
                 <main
+                    id="main-content"
                     role="status"
                     className="mx-auto max-w-5xl px-5 py-12 text-muted sm:px-8"
                 >

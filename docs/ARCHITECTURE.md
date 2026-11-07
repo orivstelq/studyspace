@@ -30,19 +30,20 @@ Backend:
 
 Persistence:
 - PostgreSQL
-- Prisma ORM (planned)
+- Prisma ORM
 - Version-controlled database migrations
 
 Validation:
-- Zod for request and domain schemas (planned)
+- Explicit allowlists and bounds at server entry points
+- PostgreSQL constraints for stored invariants
 
 Authentication:
-- Established authentication provider (TBD)
+- Auth0 OpenID Connect
 - Server-verified sessions
 - No custom password cryptography
 
 Testing:
-- Vitest for unit tests (planned)
+- Vitest for unit tests
 - Integration tests for database/API behavior
 - Playwright for end-to-end testing (planned)
 
@@ -160,7 +161,6 @@ StudySpaceAmenity:
 
 Future entities:
 - User
-- Favorite
 - Review
 - UserReport
 - ModerationAction
@@ -247,3 +247,15 @@ Require:
 - Database backups
 - Migration process
 - Monitoring and error reporting
+
+## Implemented directory, private, and community flows
+
+Explore and the public list API share validation and a bounded, parameterized Prisma query. Detail reads share the published-only predicate and an explicit public field selection. Source URLs must be HTTPS and a listing needs a review timestamp before displaying a source-check badge.
+
+Saved uses Auth0 OpenID Connect and a PostgreSQL session store. Server actions validate the request origin and resolve the owner from the verified session. Favorites and sessions use a dedicated runtime connection. Public reads retain their separate read-only role. See the README for setup and the listing review guide for the starter dataset.
+
+The header account menu is a streamed server component inside `Suspense`, so session access does not block the shared shell or enter a shared cache. Auth0 supplies `name` and `email` through the `profile` and `email` scopes; the session store keeps only one resolved display label, preferring name. Account identity is never added to public review DTOs.
+
+Profile stores an optional preferred category and a bounded set of known amenity codes. The same private runtime role and transaction-local owner context protect profile reads and writes with PostgreSQL row-level security. A bounded recommendation query scores published spaces deterministically: category matches receive two points, confirmed amenity matches receive one each, and a checked source receives one. The profile UI shows every reason; unknown facts receive no credit. Public directory order remains unchanged.
+
+Reviews use a one-row-per-owner-and-listing lifecycle, with a database trigger preventing owner or listing reassignment. Owner edits return the same row to `PENDING`, temporarily removing an approved review from public view; the MVP does not retain a separate published version. Public reads select only `APPROVED` reviews and explicit public fields. Reports target either a published listing or an approved review and are invisible to their submitter after insertion. `/admin` reads bounded pending, published, and report queues only after the verified Auth0 subject matches the server-only moderator allowlist. Every moderator transition is checked in the DAL, constrained by the current status, protected by PostgreSQL policies, and written to `ModerationAction` in the same transaction.

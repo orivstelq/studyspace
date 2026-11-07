@@ -3,7 +3,7 @@
 
 Status: Draft v0.1
 Database: PostgreSQL
-ORM: Prisma (planned)
+ORM: Prisma
 
 ## 1. Purpose
 
@@ -128,18 +128,13 @@ a review workflow and evidence requirements.
 
 No public write endpoints in the first release.
 
-## 9. Future Entities
+## 9. Community Entities
 
-Not implemented in the initial migration:
+`Review` is unique by owner and listing. Ratings are 1–5 and review text is 20–2,000 characters. Status transitions control public visibility; only approved rows have a publication timestamp.
 
-- User
-- Favorite
-- Review
-- UserReport
-- ModerationAction
+`UserReport` targets exactly one published listing or visible review. Open-report partial unique indexes limit an account to one active report per target. Reports and resolution data are moderator-private.
 
-These require separate authentication,
-authorization, privacy, and abuse-prevention design.
+`ModerationAction` records the hashed moderator identity, action, target, and timestamp. Application roles may insert moderator-authorized audit rows but cannot update or delete them.
 
 ## 10. Migration Strategy
 
@@ -163,3 +158,15 @@ Use separate development and production databases.
 - Invalid records are rejected
 - Integration tests exercise real PostgreSQL behavior
 - Application builds without client-side database secrets
+
+## Implemented private tables
+
+`Favorite` is keyed by a hash of the configured issuer domain and authenticated subject, together with the study space UUID. The composite key makes repeated saves idempotent. Deleting a study space cascades to favorites. Archived spaces are hidden from Saved while their bookmarks remain stored. PostgreSQL row-level security matches the owner against a transaction-local setting.
+
+`AuthSession` stores the SDK session identifier, provider subject, provider session identifier, creation time, expiry, and one optional display label. The label is the provider display name or email fallback used by the private account UI. Existing rows may keep it null. The data supports expiry enforcement, sign-out, and provider-initiated revocation without persisting provider tokens or a broader profile. Runtime grants are applied separately from Prisma migrations.
+
+`UserProfile` is keyed by the same issuer-scoped owner hash as favorites. It stores an optional preferred category and up to five known amenity codes. A database check rejects unsupported or oversized preference sets, and row-level security prevents cross-owner reads and writes.
+
+`Review`, `UserReport`, and `ModerationAction` use role-specific PostgreSQL policies. The public role can read only approved reviews for published non-fixture listings. Review owner and listing keys are immutable after insertion. Owners can read and edit only their own review, can insert reports without reading them back, and cannot use moderator policies through browser input. Editing an approved review returns the single stored row to pending and removes it from public reads until reapproved.
+
+The transaction-local moderator flag is set only after trusted server-side role assignment, but it remains an application-controlled database setting rather than an independently authenticated database role. The private runtime credential and server process are therefore part of the moderator trust boundary.

@@ -26,6 +26,8 @@ function testDatabaseUrl(key: "DIRECT_URL" | "DATABASE_URL") {
     }
 
     url.pathname = "/studyspace_test";
+    url.search = "";
+    url.hash = "";
     return url.toString();
 }
 
@@ -52,10 +54,8 @@ describe("StudySpace PostgreSQL integration", () => {
             "SELECT current_database() AS database, current_user AS role",
         );
 
-        expect(migration.rows[0]).toEqual({
-            database: "studyspace_test",
-            role: "sidharthbajoji",
-        });
+        expect(migration.rows[0].database).toBe("studyspace_test");
+        expect(migration.rows[0].role).not.toBe("studyspace_app");
 
         expect(application.rows[0]).toEqual({
             database: "studyspace_test",
@@ -91,6 +91,25 @@ describe("StudySpace PostgreSQL integration", () => {
             can_update: false,
             can_delete: false,
         });
+    });
+
+    it("keeps tables created by the migration owner private by default", async () => {
+        const tableName = `DefaultPrivilegeProbe_${randomUUID().replaceAll("-", "")}`;
+        const identifier = `"${tableName}"`;
+        await migrationPool.query(`CREATE TABLE ${identifier} ("id" INTEGER)`);
+
+        try {
+            const privileges = await migrationPool.query(
+                `SELECT
+                    has_table_privilege('studyspace_app', $1, 'SELECT') AS app_can_read,
+                    has_table_privilege('studyspace_saved', $1, 'SELECT') AS saved_can_read`,
+                [`public.${identifier}`],
+            );
+            expect(privileges.rows[0]).toEqual({ app_can_read: false, saved_can_read: false });
+            await expect(applicationPool.query(`SELECT * FROM ${identifier}`)).rejects.toMatchObject({ code: "42501" });
+        } finally {
+            await migrationPool.query(`DROP TABLE ${identifier}`);
+        }
     });
 
     it("rejects invalid coordinates and published fixtures", async () => {

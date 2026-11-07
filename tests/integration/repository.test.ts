@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../src/generated/prisma/client";
-import { queryPublishedSpaces } from "../../src/features/discovery/query";
+import { queryPublishedSpaceBySlug, queryPublishedSpaces, queryRecommendationCandidates } from "../../src/features/discovery/query";
 
 function getTestUrl(
     key: "DIRECT_URL" | "DATABASE_URL",
@@ -54,6 +54,69 @@ describe("Published study spaces repository", () => {
     afterAll(async () => {
         await prisma.$disconnect();
         await migrationPool.end();
+    });
+
+    it("returns an exact published slug with only public detail fields", async () => {
+        const id = randomUUID();
+        const slug = `test-${id}`;
+        await migrationPool.query(
+            `INSERT INTO "StudySpace" (
+                "id", "slug", "name", "description", "category",
+                "city", "region", "status", "sourceType", "updatedAt"
+            ) VALUES ($1, $2, 'Detail test', 'Temporary test record',
+                'LIBRARY', 'Test City', 'Test Region', 'PUBLISHED', 'OFFICIAL', NOW())`,
+            [id, slug],
+        );
+
+        try {
+            expect(await queryPublishedSpaceBySlug(prisma, slug)).toEqual({
+                id,
+                slug,
+                name: "Detail test",
+                description: "Temporary test record",
+                category: "LIBRARY",
+                city: "Test City",
+                region: "Test Region",
+                address: null,
+                sourceType: "OFFICIAL",
+                sourceUrl: null,
+                verifiedAt: null,
+                amenities: [],
+            });
+
+            for (const missingSlug of [
+                slug.toUpperCase(),
+                `${slug}-missing`,
+                `${slug}' OR '1'='1`,
+            ]) {
+                expect(await queryPublishedSpaceBySlug(prisma, missingSlug)).toBeNull();
+            }
+        } finally {
+            await migrationPool.query('DELETE FROM "StudySpace" WHERE "id" = $1', [id]);
+        }
+    });
+
+    it.each([
+        ["DRAFT", "OFFICIAL"],
+        ["ARCHIVED", "OFFICIAL"],
+        ["DRAFT", "DEVELOPMENT_FIXTURE"],
+    ])("does not reveal %s %s listings by known slug", async (status, source) => {
+        const id = randomUUID();
+        const slug = `test-${id}`;
+        await migrationPool.query(
+            `INSERT INTO "StudySpace" (
+                "id", "slug", "name", "description", "category",
+                "city", "region", "status", "sourceType", "updatedAt"
+            ) VALUES ($1, $2, 'Private detail test', 'Temporary test record',
+                'LIBRARY', 'Test City', 'Test Region', $3, $4, NOW())`,
+            [id, slug, status, source],
+        );
+
+        try {
+            expect(await queryPublishedSpaceBySlug(prisma, slug)).toBeNull();
+        } finally {
+            await migrationPool.query('DELETE FROM "StudySpace" WHERE "id" = $1', [id]);
+        }
     });
 
     it("returns only eligible records in order with a 20-item limit", async () => {
@@ -124,10 +187,16 @@ describe("Published study spaces repository", () => {
                 insertedIds.push(id);
             }
 
-            const results = await queryPublishedSpaces(prisma);
+            const filters = { query: prefix.toUpperCase(), category: "library", amenity: "all", page: 1 } as const;
+            const { spaces: results, hasNext } = await queryPublishedSpaces(prisma, filters);
+            expect(hasNext).toBe(true);
+            const lastPage = await queryPublishedSpaces(prisma, { ...filters, page: 2 });
+            expect(lastPage.spaces.map((space) => space.name)).toEqual([`${prefix}-20`, `${prefix}-21`]);
+            expect(lastPage.hasNext).toBe(false);
+            expect((await queryPublishedSpaces(prisma, { ...filters, query: `${prefix}%` })).spaces).toEqual([]);
+            expect((await queryPublishedSpaces(prisma, { ...filters, category: "cafe" })).spaces).toEqual([]);
+            expect((await queryPublishedSpaces(prisma, { ...filters, amenity: "wifi" })).spaces).toEqual([]);
 
-            // The dedicated test DB should contain only our
-            // temporary records for this test.
             expect(results).toHaveLength(20);
 
             const expectedNames = records
@@ -149,6 +218,11 @@ describe("Published study spaces repository", () => {
                 space.name.endsWith("-archived") ||
                 space.name.endsWith("-fixture")
             )).toBe(false);
+
+            const candidates = (await queryRecommendationCandidates(prisma))
+                .filter((space) => space.name.startsWith(prefix));
+            expect(candidates).toHaveLength(22);
+            expect(candidates.every((space) => space.name.match(/-\d{2}$/))).toBe(true);
         } finally {
             if (insertedIds.length > 0) {
                 await migrationPool.query(

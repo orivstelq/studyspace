@@ -27,6 +27,38 @@ enum SourceType {
   DEVELOPMENT_FIXTURE
 }
 
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  HIDDEN
+}
+
+enum ReportTargetType {
+  LISTING
+  REVIEW
+}
+
+enum ReportReason {
+  INACCURATE
+  CLOSED
+  INAPPROPRIATE
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+}
+
+enum ModerationActionType {
+  REVIEW_APPROVED
+  REVIEW_REJECTED
+  REVIEW_HIDDEN
+  REPORT_RESOLVED
+}
+
 model StudySpace {
   id          String        @id @default(uuid()) @db.Uuid
   slug        String        @unique @db.VarChar(160)
@@ -49,6 +81,9 @@ model StudySpace {
   updatedAt DateTime @updatedAt
 
   amenities StudySpaceAmenity[]
+  favorites Favorite[]
+  reviews   Review[]
+  reports   UserReport[]
 
   @@index([status, category])
   @@index([city])
@@ -70,4 +105,92 @@ model StudySpaceAmenity {
   amenity    Amenity    @relation(fields: [amenityId], references: [id], onDelete: Cascade)
 
   @@id([studySpaceId, amenityId])
+}
+
+model Favorite {
+  ownerKey     String   @db.VarChar(64)
+  studySpaceId String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  studySpace StudySpace @relation(fields: [studySpaceId], references: [id], onDelete: Cascade)
+
+  @@id([ownerKey, studySpaceId])
+  @@index([ownerKey, createdAt, studySpaceId])
+  @@index([studySpaceId])
+}
+
+model AuthSession {
+  id                String   @id @db.VarChar(32)
+  subject           String   @db.VarChar(255)
+  displayLabel      String?  @db.VarChar(255)
+  providerSessionId String   @db.VarChar(255)
+  createdAt         Int
+  expiresAt         DateTime
+
+  @@index([subject])
+  @@index([providerSessionId])
+  @@index([expiresAt])
+}
+
+model UserProfile {
+  ownerKey           String         @id @db.VarChar(64)
+  preferredCategory  SpaceCategory?
+  preferredAmenities String[]       @default([]) @db.VarChar(60)
+  updatedAt          DateTime       @updatedAt
+}
+
+model Review {
+  id           String       @id @default(uuid()) @db.Uuid
+  ownerKey     String       @db.VarChar(64)
+  studySpaceId String       @db.Uuid
+  rating       Int          @db.SmallInt
+  body         String       @db.VarChar(2000)
+  status       ReviewStatus @default(PENDING)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  publishedAt  DateTime?
+
+  studySpace        StudySpace         @relation(fields: [studySpaceId], references: [id], onDelete: Restrict)
+  reports           UserReport[]
+  moderationActions ModerationAction[]
+
+  @@unique([ownerKey, studySpaceId])
+  @@index([studySpaceId, status, publishedAt])
+  @@index([status, updatedAt])
+}
+
+model UserReport {
+  id          String           @id @default(uuid()) @db.Uuid
+  reporterKey String           @db.VarChar(64)
+  targetType  ReportTargetType
+  listingId   String?          @db.Uuid
+  reviewId    String?          @db.Uuid
+  reason      ReportReason
+  details     String?          @db.VarChar(1000)
+  status      ReportStatus     @default(OPEN)
+  createdAt   DateTime         @default(now())
+  resolvedAt  DateTime?
+
+  listing           StudySpace?        @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  review            Review?            @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  moderationActions ModerationAction[]
+
+  @@index([status, createdAt])
+  @@index([listingId])
+  @@index([reviewId])
+}
+
+model ModerationAction {
+  id           String               @id @default(uuid()) @db.Uuid
+  moderatorKey String               @db.VarChar(64)
+  action       ModerationActionType
+  reviewId     String?              @db.Uuid
+  reportId     String?              @db.Uuid
+  createdAt    DateTime             @default(now())
+
+  review Review?     @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  report UserReport? @relation(fields: [reportId], references: [id], onDelete: Restrict)
+
+  @@index([reviewId, createdAt])
+  @@index([reportId, createdAt])
 }
