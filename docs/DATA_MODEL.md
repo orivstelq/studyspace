@@ -171,4 +171,4 @@ Use separate development and production databases.
 
 The transaction-local moderator flag is set only after trusted server-side role assignment, but it remains an application-controlled database setting rather than an independently authenticated database role. The private runtime credential and server process are therefore part of the moderator trust boundary.
 
-`RateLimitBucket` stores one atomic fixed-window counter per scoped HMAC key. It contains no raw account subject or client address. Only the private runtime role can read or mutate counters; the public directory role has no table privilege. Expired buckets may be deleted by scheduled maintenance after their reset time.
+`RateLimitBucket` stores one atomic fixed-window counter per scoped HMAC key. It contains no raw account subject or client address. Only the private runtime role can read or mutate counters; the public directory role has no table privilege. A security-definer cleanup function deletes bounded, ordered batches more than one day after reset. Its maintenance role can execute the function but has no table access.

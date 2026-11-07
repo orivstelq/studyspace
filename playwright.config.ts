@@ -23,6 +23,7 @@ export default defineConfig({
             ...process.env,
             APP_BASE_URL: "http://127.0.0.1:3100",
             RATE_LIMIT_SECRET: process.env.RATE_LIMIT_SECRET ?? "local-e2e-rate-limit-secret-not-for-production",
+            TRUSTED_CLIENT_IP_SOURCE: process.env.TRUSTED_CLIENT_IP_SOURCE ?? "shared",
         },
     },
     projects: [

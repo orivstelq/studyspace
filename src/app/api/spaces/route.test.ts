@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), limit: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), limit: vi.fn(), address: vi.fn() }));
 
 vi.mock("@/features/discovery/repository", () => ({ listPublishedSpaces: mocks.list }));
 vi.mock("@/features/discovery/directory-params", () => ({
@@ -10,7 +10,7 @@ vi.mock("@/features/discovery/directory-params", () => ({
 }));
 vi.mock("@/features/discovery/provenance", () => ({ publicSourceUrl: (value: string | null) => value }));
 vi.mock("@/lib/security/rate-limit", () => ({
-    clientAddress: () => "client",
+    clientAddress: mocks.address,
     enforceRateLimit: mocks.limit,
     rateLimitHeaders: (result: { allowed: boolean }) => result.allowed
         ? { "RateLimit-Remaining": "2" }
@@ -21,6 +21,7 @@ vi.mock("@/lib/security/rate-limit", () => ({
 describe("GET /api/spaces", () => {
     beforeEach(() => {
         vi.resetAllMocks();
+        mocks.address.mockReturnValue("client");
         mocks.limit.mockResolvedValue({ allowed: true });
         mocks.list.mockResolvedValue({ spaces: [], hasNext: false });
     });
@@ -38,6 +39,16 @@ describe("GET /api/spaces", () => {
         mocks.limit.mockRejectedValue(new Error("database unavailable"));
         const response = await GET(new Request("https://studyspace.example/api/spaces"));
         expect(response.status).toBe(503);
+        expect(mocks.list).not.toHaveBeenCalled();
+    });
+
+    it("returns 503 for unsupported ingress configuration", async () => {
+        mocks.address.mockImplementation(() => {
+            throw new Error("unsupported ingress");
+        });
+        const response = await GET(new Request("https://studyspace.example/api/spaces"));
+        expect(response.status).toBe(503);
+        expect(mocks.limit).not.toHaveBeenCalled();
         expect(mocks.list).not.toHaveBeenCalled();
     });
 

@@ -11,7 +11,7 @@ npm ci
 cp .env.example .env
 ```
 
-Create separate development and test databases named `studyspace_dev` and `studyspace_test`. Use a migration owner with permission to create the schema and two non-owner login roles named `studyspace_app` and `studyspace_saved`. Give the roles separate passwords. Keep them out of Git and put the development connection URLs in `.env`. Both runtime roles must be non-superusers without `BYPASSRLS` or membership in the migration owner role.
+Create separate development and test databases named `studyspace_dev` and `studyspace_test`. Use a migration owner with permission to create the schema, two non-owner login roles named `studyspace_app` and `studyspace_saved`, and a no-login `studyspace_maintenance` role. Give runtime logins separate passwords. Keep them out of Git and put the development connection URLs in `.env`. Runtime and maintenance roles must be non-superusers without `BYPASSRLS` or membership in the migration owner role.
 
 Generate the client, migrate the development database, and apply the runtime grants. Replace the shell variables below with URLs supplied securely to your shell. Prisma reads `DIRECT_URL` from `.env` if it is unset in the shell.
 
@@ -22,7 +22,7 @@ psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f scripts/grant-runtime-roles.sql
 npm run dev
 ```
 
-Set `RATE_LIMIT_SECRET` to an independent random secret in production. Local development can fall back to `AUTH0_SECRET`, or to a development-only constant when authentication is not configured. Production intentionally fails closed without the dedicated value.
+Set `RATE_LIMIT_SECRET` to an independent random secret in production. Local development can fall back to `AUTH0_SECRET`, or to a development-only constant when authentication is not configured. Production intentionally fails closed without the dedicated value. Set `TRUSTED_CLIENT_IP_SOURCE=shared` locally; the reviewed direct-Vercel deployment uses `vercel` and requires a live header check before launch.
 
 Run the grant script as the same migration owner that creates application tables. It removes default runtime access to future tables; grant public or private access explicitly after reviewing each new table.
 

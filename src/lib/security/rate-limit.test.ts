@@ -9,10 +9,41 @@ vi.mock("@/lib/db/private-client", () => ({ privateDatabase: vi.fn() }));
 afterEach(() => vi.unstubAllEnvs());
 
 describe("rate limiting", () => {
-    it("prefers the first proxy address and has a safe fallback", () => {
-        expect(clientAddress(new Headers({ "x-forwarded-for": "203.0.113.8, 10.0.0.1" }))).toBe("203.0.113.8");
-        expect(clientAddress(new Headers({ "x-real-ip": "203.0.113.9" }))).toBe("203.0.113.9");
-        expect(clientAddress(new Headers())).toBe("unknown");
+    it("trusts only Vercel's preserved address header in Vercel mode", () => {
+        vi.stubEnv("TRUSTED_CLIENT_IP_SOURCE", "vercel");
+        expect(clientAddress(new Headers({
+            "x-vercel-forwarded-for": "203.0.113.8",
+            "x-forwarded-for": "198.51.100.2, 10.0.0.1",
+            "x-real-ip": "198.51.100.3",
+        }))).toBe("203.0.113.8");
+        expect(clientAddress(new Headers({
+            "x-vercel-forwarded-for": "2001:db8::8",
+        }))).toBe("2001:db8::8");
+    });
+
+    it("uses one fail-safe bucket for missing or malformed trusted addresses", () => {
+        vi.stubEnv("TRUSTED_CLIENT_IP_SOURCE", "vercel");
+        expect(clientAddress(new Headers({ "x-forwarded-for": "203.0.113.8" })))
+            .toBe("shared-unidentified-vercel-client");
+        expect(clientAddress(new Headers({ "x-vercel-forwarded-for": "203.0.113.8, 10.0.0.1" })))
+            .toBe("shared-unidentified-vercel-client");
+        expect(clientAddress(new Headers({ "x-vercel-forwarded-for": "not-an-ip" })))
+            .toBe("shared-unidentified-vercel-client");
+    });
+
+    it("fails closed for missing or unsupported production ingress configuration", () => {
+        vi.stubEnv("NODE_ENV", "production");
+        vi.stubEnv("TRUSTED_CLIENT_IP_SOURCE", "");
+        expect(() => clientAddress(new Headers({ "x-forwarded-for": "203.0.113.8" })))
+            .toThrow(/must be 'vercel' or 'shared'/);
+        vi.stubEnv("TRUSTED_CLIENT_IP_SOURCE", "x-forwarded-for");
+        expect(() => clientAddress(new Headers({ "x-forwarded-for": "203.0.113.8" })))
+            .toThrow(/must be 'vercel' or 'shared'/);
+    });
+
+    it("defaults non-production environments to one shared bucket", () => {
+        expect(clientAddress(new Headers({ "x-forwarded-for": "203.0.113.8" })))
+            .toBe("shared-untrusted-ingress");
     });
 
     it("pseudonymizes subjects with a scoped HMAC", () => {

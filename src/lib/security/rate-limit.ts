@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHmac } from "node:crypto";
+import { isIP } from "node:net";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { privateDatabase } from "@/lib/db/private-client";
 
@@ -44,8 +45,15 @@ function signingSecret() {
 }
 
 export function clientAddress(headers: Headers) {
-    const forwarded = headers.get("x-forwarded-for")?.split(",", 1)[0]?.trim();
-    return forwarded || headers.get("x-real-ip")?.trim() || "unknown";
+    const source = process.env.TRUSTED_CLIENT_IP_SOURCE
+        ?? (process.env.NODE_ENV === "production" ? undefined : "shared");
+    if (source === "shared") return "shared-untrusted-ingress";
+    if (source !== "vercel") {
+        throw new Error("TRUSTED_CLIENT_IP_SOURCE must be 'vercel' or 'shared'.");
+    }
+
+    const address = headers.get("x-vercel-forwarded-for")?.trim();
+    return address && isIP(address) ? address : "shared-unidentified-vercel-client";
 }
 
 export function rateLimitKey(policy: RateLimitPolicy, subject: string) {
