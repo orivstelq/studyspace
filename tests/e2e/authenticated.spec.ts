@@ -1,5 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
+const authenticatedState = process.env.PLAYWRIGHT_USER_A_STATE ?? process.env.PLAYWRIGHT_AUTH_STATE;
+
 function accountDisclosure(page: Page) {
     const details = page.locator("details").filter({
         has: page.locator("summary[aria-label^='Account menu for']"),
@@ -8,7 +10,7 @@ function accountDisclosure(page: Page) {
 }
 
 test("Account disclosure is keyboard accessible and links to Profile", async ({ page }) => {
-    test.skip(!process.env.PLAYWRIGHT_AUTH_STATE, "Set PLAYWRIGHT_AUTH_STATE to an ignored, environment-local storage-state file.");
+    test.skip(!authenticatedState, "Set PLAYWRIGHT_USER_A_STATE to an ignored, environment-local storage-state file.");
     await page.goto("/");
     const { details, summary } = accountDisclosure(page);
     await expect(summary).toHaveAttribute("aria-label", /^Account menu for .+/);
@@ -24,7 +26,7 @@ test("Account disclosure is keyboard accessible and links to Profile", async ({ 
 });
 
 test("Account disclosure exposes the server logout route", async ({ page }) => {
-    test.skip(!process.env.PLAYWRIGHT_AUTH_STATE, "Set PLAYWRIGHT_AUTH_STATE to an ignored, environment-local storage-state file.");
+    test.skip(!authenticatedState, "Set PLAYWRIGHT_USER_A_STATE to an ignored, environment-local storage-state file.");
     await page.goto("/");
     const { details, summary } = accountDisclosure(page);
     await summary.click();

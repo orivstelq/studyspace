@@ -36,3 +36,14 @@ test("invalid filters and missing listings have recoverable error states", async
     await expect(page.getByRole("heading", { name: "This page is unavailable" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Browse study spaces" })).toBeVisible();
 });
+
+test("signed-out private pages offer sign-in without exposing account data", async ({ page }) => {
+    await page.goto("/profile");
+    await expect(page.getByRole("heading", { name: "Sign in to save preferences" })).toBeVisible();
+    await expect(page.locator("#main-content").getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth/login?returnTo=/profile");
+    await expect(page.getByText("Active account")).toHaveCount(0);
+
+    await page.goto("/saved");
+    await expect(page.getByRole("heading", { name: "Your collection starts here" })).toBeVisible();
+    await expect(page.locator("#main-content").getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth/login");
+});

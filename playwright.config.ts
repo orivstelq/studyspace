@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const authenticatedState = process.env.PLAYWRIGHT_AUTH_STATE;
+const authenticatedState = process.env.PLAYWRIGHT_USER_A_STATE ?? process.env.PLAYWRIGHT_AUTH_STATE;
 
 export default defineConfig({
     testDir: "./tests/e2e",
@@ -29,12 +29,12 @@ export default defineConfig({
     projects: [
         {
             name: "chromium-public",
-            testIgnore: /authenticated\.spec\.ts/,
+            testIgnore: /(?:authenticated|live-auth)\.spec\.ts/,
             use: { ...devices["Desktop Chrome"] },
         },
         ...(authenticatedState ? [{
             name: "chromium-authenticated",
-            testMatch: /authenticated\.spec\.ts/,
+            testMatch: /(?:authenticated|live-auth)\.spec\.ts/,
             use: { ...devices["Desktop Chrome"], storageState: authenticatedState },
         }] : []),
     ],
