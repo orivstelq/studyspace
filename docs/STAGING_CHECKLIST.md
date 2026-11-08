@@ -18,13 +18,14 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 | NOT RUN | Environment identity | Redacted console capture: project `curly-paper-15884428`, AWS US East 2, database `studyspace_staging`, PostgreSQL 18.6 |
 | NOT RUN | Backup policy | Recorded retention, RPO, RTO, and successful isolated restore rehearsal |
 | NOT RUN | Preflight | Redacted `scripts/staging/preflight.sql` output with expected DB/version/permission attributes |
-| NOT RUN | Login identities | Catalog output showing three fixed login roles with no elevated attributes; secrets excluded |
+| NOT RUN | Login identities | Catalog output showing three fixed login roles with no elevated attributes; provisioning transcript excludes secrets and records Neon's plaintext-over-TLS requirement |
 | NOT RUN | Membership | `INHERIT TRUE`, `SET FALSE`, `ADMIN FALSE`, exactly one permission role per login |
 | NOT RUN | Ownership | All application objects owned by `neondb_owner`; no runtime/permission role owns objects |
 | NOT RUN | Migrations | `prisma migrate status` and `_prisma_migrations` show every committed migration exactly once |
 | NOT RUN | Grants/defaults | Public database/schema access revoked; temporary future table is private until explicitly granted |
 | NOT RUN | Public denial | Application login cannot read private account, report, moderation, session, or rate-limit tables |
 | NOT RUN | Owner isolation | Two distinct verified owner contexts cannot read or mutate each other's Favorite/Profile/Review data |
+| NOT RUN | Live Favorite RLS probe | Reviewed wrapper fixing libpq `verify-full` with system certificate trust, plus output for restricted-login isolation, rollback, and exact fixture cleanup |
 | NOT RUN | Review integrity | Rating/body edit succeeds; owner/listing reassignment fails; approved edit becomes pending/private |
 | NOT RUN | Moderator boundary | Browser/non-moderator cannot set moderator authority; valid moderator transitions create audit rows |
 | NOT RUN | Reports | Submitter/public cannot read reports; moderator can resolve with an audit row |

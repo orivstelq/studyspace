@@ -1,6 +1,6 @@
 # Staging deployment preparation
 
-Status: prepared, not provisioned or deployed. This document does not authorize a Neon mutation, Vercel connection, Auth0 change, or service purchase.
+Status: the staging database roles, migrations, grants, and static security verification are provisioned; the application is not deployed. This document does not authorize a Neon mutation, credential rotation, Vercel connection, Auth0 change, or service purchase.
 
 ## Fixed environment boundary
 
@@ -30,46 +30,66 @@ After explicit approval, create exactly three environment-specific login identit
 | `studyspace_staging_saved_login` | `studyspace_saved` | Pooled `FAVORITES_DATABASE_URL` |
 | `studyspace_staging_maintenance_login` | `studyspace_maintenance` | Direct `MAINTENANCE_DATABASE_URL`, held only by the eventual scheduler/operator |
 
-Each login is `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`. PostgreSQL 18 membership is granted with `INHERIT TRUE`, `SET FALSE`, and `ADMIN FALSE` for exactly one permission role. The global `NOINHERIT` default makes an accidental future membership inert unless its inheritance is reviewed explicitly. `SET FALSE` prevents changing identity to the group role, and `ADMIN FALSE` prevents delegating membership. Permission roles own no SQL objects; runtime logins own no SQL objects and are never members of `neondb_owner` or a Neon administrative role.
+Each login is `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS`. PostgreSQL 18 membership is granted with `INHERIT TRUE`, `SET FALSE`, and `ADMIN FALSE` for exactly one permission role. The global `NOINHERIT` default makes an accidental future membership inert unless its inheritance is reviewed explicitly. `SET FALSE` prevents changing identity to the group role, and `ADMIN FALSE` prevents delegating membership. Permission roles own no SQL objects; runtime logins own no SQL objects and are never members of `neondb_owner` or a Neon administrative role.
 
 This layout matters for RLS. The migration owner bypasses policies as table owner, while the runtime login does not own tables, has no `BYPASSRLS`, and reaches privileges only through its reviewed permission role. The application still must set the verified owner/moderator transaction context; RLS is defense in depth, not authentication.
 
 ## Exact provisioning sequence
 
-Every command below is pending approval and requires a direct owner URL supplied in the operator's local environment. Never paste a URL into a command transcript, issue, or pull request. Run one step at a time and retain redacted command output as release evidence.
+Treat the sequence below as the reviewed procedure for a new environment; the existing staging database has already completed the database steps. Every future mutation requires explicit approval and credentials supplied through the operator's local environment. Never paste a credential or URL into a command transcript, issue, or pull request. Run one step at a time and retain redacted output as release evidence.
 
 1. Confirm the Neon console metadata: project ID, region, branch, database, PostgreSQL 18.6, restore window, and the three existing NOLOGIN permission roles. Confirm the connection widget shows both pooled and direct endpoints.
-2. Set `STAGING_DIRECT_URL` only in the operator's current secret-capable shell or password manager integration. Run the read-only preflight:
+2. Have the secret manager inject the direct owner connection through libpq environment variables. Run the read-only preflight without a credential-bearing command-line argument:
 
    ```sh
-   psql "$STAGING_DIRECT_URL" -f scripts/staging/preflight.sql
+   psql -X --set=ON_ERROR_STOP=1 --file=scripts/staging/preflight.sql
    ```
 
-3. With explicit approval to create credentials, generate three independent high-entropy passwords in the approved secret manager. Run the script with a PostgreSQL 18 `psql` client and no user startup file:
+3. For a new environment only, have the approved secret manager inject the direct owner connection as standard libpq variables: `PGHOST`, optional `PGPORT`, `PGDATABASE=studyspace_staging`, `PGUSER=neondb_owner`, `PGPASSWORD`, and `PGSSLMODE=verify-full`. Do not put the owner password or a credential-bearing URL in the command line. Generate three unique passwords of 32–128 characters using the alphabet documented by the provisioning prompt, then run from an interactive terminal:
 
    ```sh
-   psql -X "$STAGING_DIRECT_URL" -f scripts/staging/create-login-identities.sql
+   scripts/staging/provision-login-identities.sh
    ```
 
-   The script creates or reuses only correctly constrained `NOLOGIN` identities, then uses the supported `\password` command to prompt twice for each password without putting plaintext in SQL history or server logs. Only after all three password commands succeed does one transaction enable `LOGIN` for all three roles. Store each resulting connection URL only in its intended secret store.
+   The wrapper first runs `create-login-identities.sql`, which creates or reuses only correctly constrained `NOLOGIN` identities over verified TLS. It then reads each password twice with terminal echo disabled. The values exist in local process memory and a private pipe, not command-line arguments, shell history, committed SQL, or emitted diagnostics. In one transaction it verifies the role preconditions, sends three `ALTER ROLE ... PASSWORD` statements, and then applies all three `LOGIN` changes. `LOGIN` is committed only after Neon accepts every password statement; independent authentication is then checked with each runtime connection in step 6. Neon requires the plaintext values and receives them over verified TLS for password processing; the values may therefore be exposed to Neon's database processing and provider-side logging controls. This workflow does not claim zero server-side exposure.
 
-   If the client, network, or a password prompt fails before the final commit, the identities remain `NOLOGIN`. Inspect `pg_roles`, confirm all three fixed identities are present with `rolcanlogin = false` and no elevated attributes, and rerun the entire script; it safely replaces all three passwords. If any identity is unexpectedly `LOGIN` or has different attributes, do not rerun. Immediately disable all three with `ALTER ROLE ... NOLOGIN` in one owner transaction, investigate the partial change, restore the documented attributes, and then rerun. A completed run is not a password-rotation mechanism: disable all three identities first and schedule the resulting runtime interruption before using this recovery path.
+   A prompt, network, SQL, or client failure before `COMMIT` leaves all identities `NOLOGIN` and rolls back every password change; after confirming the exact inert attributes and absence of memberships, rerun the wrapper. An existing `LOGIN`, elevated attribute, or membership makes the workflow abort before prompting or changing credentials. The currently provisioned staging roles are already `LOGIN` with verified credentials and memberships, so **do not run this workflow against them**. Rotation requires a separate approved maintenance procedure and deliberate interruption plan.
 4. Apply the fixed membership options:
 
    ```sh
-   psql "$STAGING_DIRECT_URL" -f scripts/staging/configure-role-memberships.sql
+   psql -X --set=ON_ERROR_STOP=1 --file=scripts/staging/configure-role-memberships.sql
    ```
 
-5. Check `_prisma_migrations` and schema emptiness. On the first provisioning only, apply every committed migration in order with the direct owner URL, then apply explicit/default runtime grants as the same owner:
+5. Check `_prisma_migrations` and schema emptiness. On the first provisioning only, have the secret manager inject the direct owner URL as `DIRECT_URL`, apply every committed migration in order, then restore the owner libpq variables and apply explicit/default runtime grants:
 
    ```sh
-   DIRECT_URL="$STAGING_DIRECT_URL" npx prisma migrate deploy
-   psql "$STAGING_DIRECT_URL" -f scripts/grant-runtime-roles.sql
+   npx prisma migrate deploy
+   psql -X --set=ON_ERROR_STOP=1 --file=scripts/grant-runtime-roles.sql
    ```
 
    Never use `prisma migrate dev`, reset, a shadow database, or migration rewriting against staging. The grant script revokes `PUBLIC` database temporary/connect access and schema creation, then grants database connection, schema usage, and reviewed object privileges to the permission roles.
 
 6. Run `scripts/staging/verify-database-security.sql` as the owner. Then connect separately with each runtime URL and verify `session_user`, `current_user`, `pg_has_role`, object privileges, and denial cases. The application login must fail to read `Favorite`, `UserProfile`, `AuthSession`, `UserReport`, `ModerationAction`, and `RateLimitBucket`. The private login must be unable to cross account owner context, reassign a review, or obtain moderator access without the server-controlled setting. The maintenance login must execute only the bounded cleanup function and must not read or delete the table directly.
+
+   For the deliberate Favorite RLS check, have the secret manager inject `STAGING_OWNER_PGHOST`, `STAGING_OWNER_PGPASSWORD`, `STAGING_SAVED_PGHOST`, and `STAGING_SAVED_PGPASSWORD`; the matching `STAGING_OWNER_PGPORT` and `STAGING_SAVED_PGPORT` are optional. Do not supply a connection URL or put a password in the command. Run only the guarded wrapper:
+
+   ```sh
+   scripts/staging/verify-favorite-rls-live.sh
+   ```
+
+   The wrapper fixes `PGSSLMODE=verify-full` and `PGSSLROOTCERT=system` for both libpq connections, so libpq uses the operating system certificate store to verify encryption, the server certificate, and the hostname before SQL runs. This avoids depending on `~/.postgresql/root.crt`, which was absent from the verified macOS PostgreSQL 17.11 client. Before applying those fixed values, the wrapper removes inherited service-file, password-file, host-address, certificate, key, CRL, SSL-mode/protocol, channel-binding, peer, GSS-encryption, and session-option overrides. It deliberately does not use `pg_stat_ssl`: Neon reported `ssl = false` there for a connection independently confirmed as TLS 1.3, so that server-side view is not accepted as client TLS evidence.
+
+   Because the saved login cannot create listings and staging may be empty, the wrapper first uses the direct owner connection to commit one uniquely identified `DRAFT`/`DEVELOPMENT_FIXTURE` listing. The fixture is never public. It then switches to the saved login, verifies the database, exact login attributes, sole membership, RLS ownership, and each required Favorite privilege independently. In one saved-login transaction it creates two random fictional owner keys, proves each can insert/read/delete its exact Favorite while bidirectional cross-owner insert/read/delete fails, explicitly removes both rows, and executes `ROLLBACK`. A SQL error or disconnected saved connection rolls back every Favorite mutation.
+
+   An exit/signal trap always reconnects as the owner with `PGSSLMODE=verify-full` and `PGSSLROOTCERT=system`, deletes only the exact UUID-marked draft fixture, verifies that neither it nor related Favorites remain, and makes cleanup failure fail the command. Uncatchable termination or a simultaneous network outage cannot be given an absolute immediate-cleanup guarantee for a fixture that must be committed across two connections. The wrapper prints the non-secret fixture UUID before creation so recovery is deterministic. After restoring the owner libpq environment with those same TLS settings, use the printed UUID with the idempotent recovery command and retain its successful output:
+
+   ```sh
+   psql -X --set=ON_ERROR_STOP=1 \
+     --set=fixture_id=PRINTED_FIXTURE_UUID \
+     --file=scripts/staging/cleanup-favorite-rls-fixture.sql
+   ```
+
+   The verifier is never called by tests, CI, migrations, builds, or deployments. Its unit coverage only inspects these scripts statically.
 7. Load only reviewed, non-sensitive staging listing data. Do not copy local account/session/community tables or eventual production data.
 8. Configure a dedicated Vercel staging project only after separate approval. Use pooled runtime URLs and omit `DIRECT_URL` and `MAINTENANCE_DATABASE_URL` from all application build/runtime environments.
 9. Configure a dedicated Auth0 staging application with exact HTTPS callback, logout, and back-channel logout URLs. Add only dedicated test subjects to `AUTH0_MODERATOR_SUBJECTS`.
