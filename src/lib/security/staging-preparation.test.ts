@@ -115,4 +115,44 @@ describe("staging preparation", () => {
         );
         expect(wrapper).toContain("status=1");
     });
+
+    it("schedules one fail-closed maintenance cleanup batch", () => {
+        const workflow = readFileSync(".github/workflows/rate-limit-cleanup.yml", "utf8");
+        const verify = readFileSync("scripts/staging/verify-maintenance-connection.sql", "utf8");
+        const cleanup = readFileSync("scripts/cleanup-rate-limit-buckets.sql", "utf8");
+
+        expect(workflow).toContain('cron: "17 * * * *"');
+        expect(workflow).toContain("workflow_dispatch:");
+        expect(workflow).toContain("group: staging-rate-limit-cleanup");
+        expect(workflow).toContain("cancel-in-progress: false");
+        expect(workflow).toContain("permissions:\n  contents: read");
+        expect(workflow).toContain("environment: staging");
+        expect(workflow).toContain("secrets.MAINTENANCE_DATABASE_URL");
+        expect(workflow).not.toContain("secrets.DIRECT_URL");
+        expect(workflow).not.toContain("secrets.DATABASE_URL");
+        expect(workflow).not.toContain("secrets.FAVORITES_DATABASE_URL");
+        expect(workflow).toContain("PGSSLMODE: verify-full");
+        expect(workflow).toContain("PGSSLROOTCERT: /etc/ssl/certs/ca-certificates.crt");
+        expect(workflow).toContain("PGGSSENCMODE: disable");
+        expect(workflow).toContain("(gssencmode|service|servicefile|sslmode|sslrootcert)");
+        expect(workflow).toContain("persist-credentials: false");
+        expect(workflow).toContain("--set=ON_ERROR_STOP=1 --quiet --tuples-only --no-align");
+        expect(workflow).toContain('[[ ! "$deleted_count" =~ ^[0-9]+$ ]]');
+        expect(workflow.indexOf("verify-maintenance-connection.sql")).toBeLessThan(
+            workflow.indexOf("cleanup-rate-limit-buckets.sql"),
+        );
+        expect(workflow.match(/psql -X/g)).toHaveLength(1);
+        expect(workflow.match(/cleanup-rate-limit-buckets\.sql/g)).toHaveLength(1);
+        expect(workflow).toContain("repeated full batches indicate a cleanup backlog");
+        expect(verify).toContain("session_user <> 'studyspace_staging_maintenance_login'");
+        expect(verify).toContain("granted.rolname <> 'studyspace_maintenance'");
+        expect(verify).toContain("\\set ON_ERROR_STOP on");
+        expect(cleanup).toContain("\\set ON_ERROR_STOP on");
+        for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
+            expect(verify).toContain(`has_table_privilege(session_user, 'public."RateLimitBucket"', '${privilege}')`);
+        }
+        expect(verify).not.toMatch(/^\s*(DELETE|INSERT|UPDATE|TRUNCATE)\s/m);
+        expect(cleanup.match(/^SELECT /gm)).toHaveLength(1);
+        expect(cleanup).toContain("cleanup_expired_rate_limit_buckets(1000)");
+    });
 });

@@ -30,6 +30,7 @@ All values are server-only unless explicitly documented otherwise. Production se
 | `DATABASE_URL` | Pooled PostgreSQL URL for the read-only `studyspace_app` role. |
 | `FAVORITES_DATABASE_URL` | Pooled URL for the private `studyspace_saved` role. |
 | `DIRECT_URL` | Direct migration-owner URL, available only to the release job. Never provide it to application instances. |
+| `MAINTENANCE_DATABASE_URL` | Direct URL for the restricted maintenance login, stored only in the scheduler's protected environment. |
 | `DATABASE_POOL_MAX` | Optional per-instance public pool cap; defaults to 5. Start at 2 for serverless and raise only from database metrics. |
 | `PRIVATE_DATABASE_POOL_MAX` | Optional per-instance private pool cap; defaults to 5. Start at 2 for serverless. |
 | `RATE_LIMIT_SECRET` | Independent random 32-byte-or-longer secret used to HMAC rate-limit subjects. |
@@ -88,13 +89,17 @@ GRANT studyspace_maintenance TO studyspace_cleanup WITH ADMIN FALSE;
 
 The maintenance role has schema usage and execution of `cleanup_expired_rate_limit_buckets(integer)` only. It cannot select, insert, update, or directly delete rate-limit rows. The security-definer function removes only buckets whose reset time is more than one day old, orders work by expiry, uses `SKIP LOCKED`, and rejects batch sizes outside 1–10,000.
 
-When an approved scheduler is selected, run at most one 1,000-row batch per invocation using the maintenance login—not either runtime role or the migration owner:
+The committed `.github/workflows/rate-limit-cleanup.yml` scheduler runs hourly at minute 17 and supports controlled manual dispatch. It permits only one non-cancelled run at a time and invokes exactly one 1,000-row batch using the maintenance login—not either runtime role or the migration owner:
 
 ```sh
 psql "$MAINTENANCE_DATABASE_URL" -f scripts/cleanup-rate-limit-buckets.sql
 ```
 
-The script applies a 30-second statement timeout and two-second lock timeout. Record the returned count; repeated full batches indicate backlog and should alert an operator before increasing frequency or batch size. No scheduler, credential, or paid service is created by this milestone.
+The script applies a 30-second statement timeout and two-second lock timeout. Before calling it, the workflow fails unless the connection is the exact `studyspace_staging_maintenance_login` on `studyspace_staging`, has only the reviewed PostgreSQL 18 membership, retains no elevated attributes or direct bucket-table privileges, and can execute the bounded function. The same `psql` process performs verification and cleanup over TLS with hostname and system-CA verification.
+
+Manually create a GitHub environment named `staging` and add one environment secret named `MAINTENANCE_DATABASE_URL`. Its value must be the direct connection URL for `studyspace_staging_maintenance_login`, without URL-level service, GSS-encryption, `sslmode`, or `sslrootcert` overrides; never use the migration owner, `DATABASE_URL`, or `FAVORITES_DATABASE_URL`. The workflow remains inactive until it is present on the default branch and this secret is configured. Use `workflow_dispatch` for the first controlled run and retain the run URL as staging evidence.
+
+Every run writes the deletion count to the GitHub Actions job summary. A failed preflight, connection, timeout, lock, or SQL command fails the job visibly. A count of 1,000 adds a warning annotation; inspect the recent run summaries and treat two or more consecutive full hourly batches as backlog. Check database load and incoming traffic before manually dispatching another batch or changing cadence; do not add an unbounded loop or increase the batch size. Configure repository Actions failure notifications for the responsible operator.
 
 ## HTTPS, headers, and authentication
 

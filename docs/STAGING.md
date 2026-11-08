@@ -121,7 +121,7 @@ The two runtime URLs use Neon pooled endpoints. Each warm Vercel instance can op
 
 Run migrations once before promoting application code. Migrations are forward-only and must be backward compatible. Roll back application code by promoting the prior immutable Vercel deployment with the same Server Action encryption key. Never automatically reverse a schema migration. For data recovery, restore to an isolated Neon branch/project, validate counts and security policies, and change both runtime URLs together only after approval.
 
-Before release, choose and record backup retention, recovery-point objective, and recovery-time objective. Rehearse a restore without overwriting staging. Monitor function errors, p95 latency, 429/503 rates, database connection saturation, storage, branch health, Auth0 failures, and cleanup backlog. No monitoring vendor or scheduler is selected by this milestone.
+Before release, choose and record backup retention, recovery-point objective, and recovery-time objective. Rehearse a restore without overwriting staging. Monitor function errors, p95 latency, 429/503 rates, database connection saturation, storage, branch health, Auth0 failures, and cleanup backlog. The committed hourly GitHub Actions cleanup remains inactive until it reaches the default branch and the `staging` environment receives the restricted `MAINTENANCE_DATABASE_URL` secret; no secret, workflow run, or cloud setting was created by this repository change.
 
 ## Browser verification
 
