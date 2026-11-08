@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { parseDirectoryParams, PAGE_SIZE } from "@/features/discovery/directory-params";
 import { publicSourceUrl } from "@/features/discovery/provenance";
 import { listPublishedSpaces } from "@/features/discovery/repository";
@@ -6,6 +7,7 @@ import { clientAddress, enforceRateLimit, rateLimitHeaders, RATE_LIMITS } from "
 const headers = { "Cache-Control": "no-store" };
 
 export async function GET(request: Request) {
+    await connection();
     let rateLimit;
     try {
         rateLimit = await enforceRateLimit(RATE_LIMITS.publicSearch, clientAddress(request.headers));

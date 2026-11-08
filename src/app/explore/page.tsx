@@ -4,6 +4,7 @@ import Link from "next/link";
 import { parseDirectoryParams } from "@/features/discovery/directory-params";
 import { Suspense } from "react";
 import { headers } from "next/headers";
+import { connection } from "next/server";
 
 import { ExploreDirectory } from "@/features/discovery/explore-directory";
 import { mapDatabaseSpace } from "@/features/discovery/map-record";
@@ -17,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 async function PublishedSpacesDirectory({ searchParams }: Pick<PageProps<"/explore">, "searchParams">) {
+    await connection();
     const filters = parseDirectoryParams(await searchParams);
     if (!filters) {
         return (

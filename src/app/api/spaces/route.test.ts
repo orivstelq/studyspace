@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), limit: vi.fn(), address: vi.fn() }));
+const mocks = vi.hoisted(() => ({ connection: vi.fn(), list: vi.fn(), limit: vi.fn(), address: vi.fn() }));
 
+vi.mock("next/server", () => ({ connection: mocks.connection }));
 vi.mock("@/features/discovery/repository", () => ({ listPublishedSpaces: mocks.list }));
 vi.mock("@/features/discovery/directory-params", () => ({
     PAGE_SIZE: 20,
@@ -21,6 +22,7 @@ vi.mock("@/lib/security/rate-limit", () => ({
 describe("GET /api/spaces", () => {
     beforeEach(() => {
         vi.resetAllMocks();
+        mocks.connection.mockResolvedValue(undefined);
         mocks.address.mockReturnValue("client");
         mocks.limit.mockResolvedValue({ allowed: true });
         mocks.list.mockResolvedValue({ spaces: [], hasNext: false });

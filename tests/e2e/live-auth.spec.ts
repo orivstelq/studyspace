@@ -56,6 +56,8 @@ test("two real accounts keep Saved and Profile data isolated and persistent", as
         await pageA.getByLabel("Accessible").check();
         await pageA.getByRole("button", { name: "Save preferences" }).click();
         await expect(pageA.getByRole("status")).toHaveText("Preferences saved.");
+        await expect(pageA.getByLabel("Preferred space type")).toHaveValue("coworking");
+        await expect(pageA.getByLabel("Accessible")).toBeChecked();
         const labelA = await accountLabel(pageA);
         await userA.close();
         userA = undefined;

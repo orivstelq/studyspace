@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { AMENITIES, SPACE_CATEGORIES, type Amenity, type SpaceCategory } from "../discovery/types";
 import { updateProfile } from "./actions";
 import type { ProfilePreferences } from "./query";
@@ -22,6 +22,7 @@ const amenityLabels: Record<Amenity, string> = {
 
 export function ProfileForm({ preferences }: { preferences: ProfilePreferences }) {
     const [message, action, pending] = useActionState(updateProfile, null);
+    const [selection, setSelection] = useState(preferences);
 
     return (
         <form action={action} className="mt-8 rounded-2xl border border-clay bg-white p-6 sm:p-8">
@@ -29,7 +30,11 @@ export function ProfileForm({ preferences }: { preferences: ProfilePreferences }
             <select
                 id="preferred-category"
                 name="category"
-                defaultValue={preferences.category}
+                value={selection.category}
+                onChange={(event) => setSelection((current) => ({
+                    ...current,
+                    category: event.target.value as ProfilePreferences["category"],
+                }))}
                 className="mt-2 w-full rounded-lg border border-clay bg-paper px-4 py-3 sm:max-w-sm"
             >
                 <option value="all">No preference</option>
@@ -48,7 +53,13 @@ export function ProfileForm({ preferences }: { preferences: ProfilePreferences }
                                 type="checkbox"
                                 name="amenities"
                                 value={amenity}
-                                defaultChecked={preferences.amenities.includes(amenity)}
+                                checked={selection.amenities.includes(amenity)}
+                                onChange={(event) => setSelection((current) => ({
+                                    ...current,
+                                    amenities: event.target.checked
+                                        ? [...current.amenities, amenity]
+                                        : current.amenities.filter((item) => item !== amenity),
+                                }))}
                                 className="h-5 w-5 accent-harbor"
                             />
                             <span>{amenityLabels[amenity]}</span>
