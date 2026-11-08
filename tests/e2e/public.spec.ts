@@ -36,3 +36,28 @@ test("invalid filters and missing listings have recoverable error states", async
     await expect(page.getByRole("heading", { name: "This page is unavailable" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Browse study spaces" })).toBeVisible();
 });
+
+test("signed-out private pages offer sign-in without exposing account data", async ({ page }) => {
+    await page.goto("/profile");
+    const profile = page.locator("#main-content");
+    await expect(profile.getByRole("heading", { name: /Sign in to save preferences|Preferences are unavailable/ })).toBeVisible();
+    const profileSignIn = profile.getByRole("link", { name: "Sign in" });
+    if (await profileSignIn.count()) {
+        await expect(page.getByRole("heading", { name: "Sign in to save preferences" })).toBeVisible();
+        await expect(profileSignIn).toHaveAttribute("href", "/auth/login?returnTo=/profile");
+    } else {
+        await expect(page.getByRole("heading", { name: "Preferences are unavailable" })).toBeVisible();
+        await expect(profile.getByText("Sign-in is not configured on this installation.")).toBeVisible();
+    }
+    await expect(page.getByText("Active account")).toHaveCount(0);
+
+    await page.goto("/saved");
+    await expect(page.getByRole("heading", { name: "Your collection starts here" })).toBeVisible();
+    const saved = page.locator("#main-content");
+    const savedSignIn = saved.getByRole("link", { name: "Sign in" });
+    if (await savedSignIn.count()) {
+        await expect(savedSignIn).toHaveAttribute("href", "/auth/login");
+    } else {
+        await expect(saved.getByText("Sign-in is currently unavailable on this installation.")).toBeVisible();
+    }
+});

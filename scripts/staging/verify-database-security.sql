@@ -1,0 +1,187 @@
+\set ON_ERROR_STOP on
+
+-- Read-only post-provisioning assertions. This deliberately fails closed when
+-- role, ownership, RLS, or grant assumptions drift.
+DO $verify$
+DECLARE
+    bad_count integer;
+BEGIN
+    IF current_database() <> 'studyspace_staging' THEN
+        RAISE EXCEPTION 'expected database studyspace_staging, connected to %', current_database();
+    END IF;
+
+    IF current_setting('server_version_num')::integer < 180000
+       OR current_setting('server_version_num')::integer >= 190000 THEN
+        RAISE EXCEPTION 'expected PostgreSQL 18.x, found %', current_setting('server_version');
+    END IF;
+
+    SELECT count(*) INTO bad_count
+    FROM (VALUES
+        ('studyspace_app', 'studyspace_staging_app_login'),
+        ('studyspace_saved', 'studyspace_staging_saved_login'),
+        ('studyspace_maintenance', 'studyspace_staging_maintenance_login')
+    ) AS expected(granted_role, member_role)
+    LEFT JOIN pg_catalog.pg_roles granted ON granted.rolname = expected.granted_role
+    LEFT JOIN pg_catalog.pg_roles member ON member.rolname = expected.member_role
+    LEFT JOIN pg_catalog.pg_auth_members membership
+      ON membership.roleid = granted.oid AND membership.member = member.oid
+    WHERE granted.oid IS NULL
+       OR member.oid IS NULL
+       OR NOT member.rolcanlogin
+       OR member.rolsuper
+       OR member.rolcreatedb
+       OR member.rolcreaterole
+       OR member.rolinherit
+       OR member.rolbypassrls
+       OR membership.roleid IS NULL
+       OR NOT membership.inherit_option
+       OR membership.set_option
+       OR membership.admin_option;
+
+    IF bad_count <> 0 THEN
+        RAISE EXCEPTION 'staging login membership or attributes failed verification';
+    END IF;
+
+    SELECT count(*) INTO bad_count
+    FROM pg_catalog.pg_auth_members membership
+    JOIN pg_catalog.pg_roles granted ON granted.oid = membership.roleid
+    JOIN pg_catalog.pg_roles member ON member.oid = membership.member
+    WHERE member.rolname LIKE 'studyspace_staging_%_login'
+      AND (granted.rolname, member.rolname) NOT IN (
+        ('studyspace_app', 'studyspace_staging_app_login'),
+        ('studyspace_saved', 'studyspace_staging_saved_login'),
+        ('studyspace_maintenance', 'studyspace_staging_maintenance_login')
+      );
+
+    IF bad_count <> 0 THEN
+        RAISE EXCEPTION 'a staging login has an unexpected role membership';
+    END IF;
+
+    SELECT count(*) INTO bad_count
+    FROM pg_catalog.pg_class relation
+    JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+    JOIN pg_catalog.pg_roles owner_role ON owner_role.oid = relation.relowner
+    WHERE namespace.nspname = 'public'
+      AND relation.relkind IN ('r', 'p', 'v', 'm', 'S')
+      AND owner_role.rolname <> 'neondb_owner';
+
+    IF bad_count <> 0 THEN
+        RAISE EXCEPTION 'public schema contains objects not owned by neondb_owner';
+    END IF;
+
+    SELECT count(*) INTO bad_count
+    FROM pg_catalog.pg_proc function
+    JOIN pg_catalog.pg_namespace namespace ON namespace.oid = function.pronamespace
+    JOIN pg_catalog.pg_roles owner_role ON owner_role.oid = function.proowner
+    WHERE namespace.nspname = 'public'
+      AND owner_role.rolname <> 'neondb_owner';
+
+    IF bad_count <> 0 THEN
+        RAISE EXCEPTION 'public schema contains functions not owned by neondb_owner';
+    END IF;
+
+    SELECT count(*) INTO bad_count
+    FROM pg_catalog.pg_class relation
+    JOIN pg_catalog.pg_roles owner_role ON owner_role.oid = relation.relowner
+    WHERE owner_role.rolname IN (
+        'studyspace_app',
+        'studyspace_saved',
+        'studyspace_maintenance',
+        'studyspace_staging_app_login',
+        'studyspace_staging_saved_login',
+        'studyspace_staging_maintenance_login'
+    );
+
+    IF bad_count <> 0 THEN
+        RAISE EXCEPTION 'a runtime permission or login role owns a database object';
+    END IF;
+
+    SELECT count(*) INTO bad_count
+    FROM pg_catalog.pg_class relation
+    JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'public'
+      AND relation.relname IN ('Favorite', 'UserProfile', 'Review', 'UserReport', 'ModerationAction');
+
+    IF bad_count <> 5 THEN
+        RAISE EXCEPTION 'one or more private RLS tables are missing';
+    END IF;
+
+    SELECT count(*) INTO bad_count
+    FROM pg_catalog.pg_class relation
+    JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'public'
+      AND relation.relname IN ('Favorite', 'UserProfile', 'Review', 'UserReport', 'ModerationAction')
+      AND (NOT relation.relrowsecurity OR relation.relforcerowsecurity);
+
+    IF bad_count <> 0 THEN
+        RAISE EXCEPTION 'expected runtime-owned private tables to use RLS without FORCE RLS';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_namespace namespace,
+             LATERAL pg_catalog.aclexplode(
+                 COALESCE(namespace.nspacl, pg_catalog.acldefault('n', namespace.nspowner))
+             ) privilege
+        WHERE namespace.nspname = 'public'
+          AND privilege.grantee = 0
+          AND privilege.privilege_type = 'CREATE'
+    ) THEN
+        RAISE EXCEPTION 'PUBLIC must not have CREATE on schema public';
+    END IF;
+
+    IF has_table_privilege('studyspace_app', 'public."Favorite"', 'SELECT')
+       OR has_table_privilege('studyspace_app', 'public."UserProfile"', 'SELECT')
+       OR has_table_privilege('studyspace_app', 'public."UserReport"', 'SELECT')
+       OR has_table_privilege('studyspace_app', 'public."ModerationAction"', 'SELECT') THEN
+        RAISE EXCEPTION 'public application role can read private account or moderation tables';
+    END IF;
+
+    IF NOT has_table_privilege('studyspace_app', 'public."StudySpace"', 'SELECT')
+       OR NOT has_table_privilege('studyspace_app', 'public."Review"', 'SELECT') THEN
+        RAISE EXCEPTION 'public application role is missing required public read privileges';
+    END IF;
+
+    IF has_function_privilege('studyspace_app', 'public.cleanup_expired_rate_limit_buckets(integer)', 'EXECUTE')
+       OR has_function_privilege('studyspace_saved', 'public.cleanup_expired_rate_limit_buckets(integer)', 'EXECUTE')
+       OR NOT has_function_privilege('studyspace_maintenance', 'public.cleanup_expired_rate_limit_buckets(integer)', 'EXECUTE') THEN
+        RAISE EXCEPTION 'rate-limit cleanup function grants are incorrect';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_trigger trigger
+        JOIN pg_catalog.pg_class relation ON relation.oid = trigger.tgrelid
+        JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+        WHERE namespace.nspname = 'public'
+          AND relation.relname = 'Review'
+          AND trigger.tgname = 'Review_identity_immutable'
+          AND NOT trigger.tgisinternal
+    ) THEN
+        RAISE EXCEPTION 'review identity immutability trigger is missing';
+    END IF;
+END
+$verify$;
+
+SELECT granted.rolname AS permission_role,
+       member.rolname AS login_role,
+       membership.admin_option,
+       membership.inherit_option,
+       membership.set_option
+FROM pg_catalog.pg_auth_members membership
+JOIN pg_catalog.pg_roles granted ON granted.oid = membership.roleid
+JOIN pg_catalog.pg_roles member ON member.oid = membership.member
+WHERE member.rolname LIKE 'studyspace_staging_%_login'
+ORDER BY member.rolname, granted.rolname;
+
+SELECT namespace.nspname AS schema_name,
+       relation.relname AS object_name,
+       owner_role.rolname AS owner,
+       relation.relrowsecurity AS rls_enabled,
+       relation.relforcerowsecurity AS force_rls
+FROM pg_catalog.pg_class relation
+JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+JOIN pg_catalog.pg_roles owner_role ON owner_role.oid = relation.relowner
+WHERE namespace.nspname = 'public'
+  AND relation.relkind IN ('r', 'p')
+ORDER BY relation.relname;

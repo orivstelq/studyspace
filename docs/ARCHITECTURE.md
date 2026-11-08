@@ -238,7 +238,7 @@ Before merging changes:
 
 ## 12. Deployment
 
-The proposed production platform is Vercel for the Next.js runtime and Neon for managed PostgreSQL. See `docs/DEPLOYMENT.md` for alternatives, cost constraints, pooling, migration, backup, and rollback decisions.
+The proposed production platform is Vercel for the Next.js runtime and Neon for managed PostgreSQL. See `docs/DEPLOYMENT.md` for alternatives, cost constraints, pooling, migration, backup, and rollback decisions. Phase 3 prepares a completely isolated Neon PostgreSQL 18/Vercel/Auth0 staging environment in `docs/STAGING.md`; it does not authorize a deployment.
 
 Require:
 - HTTPS

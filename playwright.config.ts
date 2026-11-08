@@ -1,6 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
+import { LOCAL_PLAYWRIGHT_BASE_URL, resolvePlaywrightBaseUrl } from "./playwright-origin";
 
-const authenticatedState = process.env.PLAYWRIGHT_AUTH_STATE;
+const authenticatedState = process.env.PLAYWRIGHT_USER_A_STATE ?? process.env.PLAYWRIGHT_AUTH_STATE;
+const remoteBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
+const baseURL = resolvePlaywrightBaseUrl(remoteBaseUrl);
 
 export default defineConfig({
     testDir: "./tests/e2e",
@@ -10,13 +13,13 @@ export default defineConfig({
     workers: process.env.CI ? 1 : undefined,
     reporter: process.env.CI ? "github" : "list",
     use: {
-        baseURL: "http://127.0.0.1:3100",
+        baseURL,
         trace: "on-first-retry",
         screenshot: "only-on-failure",
     },
-    webServer: {
+    webServer: remoteBaseUrl === undefined ? {
         command: "npm start -- --hostname 127.0.0.1 --port 3100",
-        url: "http://127.0.0.1:3100",
+        url: LOCAL_PLAYWRIGHT_BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
         env: {
@@ -25,16 +28,16 @@ export default defineConfig({
             RATE_LIMIT_SECRET: process.env.RATE_LIMIT_SECRET ?? "local-e2e-rate-limit-secret-not-for-production",
             TRUSTED_CLIENT_IP_SOURCE: process.env.TRUSTED_CLIENT_IP_SOURCE ?? "shared",
         },
-    },
+    } : undefined,
     projects: [
         {
             name: "chromium-public",
-            testIgnore: /authenticated\.spec\.ts/,
+            testIgnore: /(?:authenticated|live-auth)\.spec\.ts/,
             use: { ...devices["Desktop Chrome"] },
         },
         ...(authenticatedState ? [{
             name: "chromium-authenticated",
-            testMatch: /authenticated\.spec\.ts/,
+            testMatch: /(?:authenticated|live-auth)\.spec\.ts/,
             use: { ...devices["Desktop Chrome"], storageState: authenticatedState },
         }] : []),
     ],
