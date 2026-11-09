@@ -1,12 +1,12 @@
 # Staging deployment preparation
 
-Status: the staging database roles, migrations, grants, and static security verification are provisioned; the application is not deployed. This document does not authorize a Neon mutation, credential rotation, Vercel connection, Auth0 change, or service purchase.
+Status: the isolated staging application is deployed from commit `70e2bf4`, and Vercel reports it Ready. Database roles, migrations, grants, and the scheduled cleanup are provisioned. Verified evidence and incomplete release gates are recorded in `docs/VERIFICATION.md` and `docs/STAGING_CHECKLIST.md`; staging readiness does not imply commercial production readiness.
 
 ## Fixed environment boundary
 
 The staging database is the existing Neon project `studyspace-staging` (`curly-paper-15884428`) in AWS US East 2, database `studyspace_staging`, PostgreSQL 18.6. Its Neon branch is named `production` only because that is the provider default; it is not an application production environment and must never receive production credentials or data.
 
-Create a separate Vercel project and a separate Auth0 Regular Web Application for staging when deployment is approved. The eventual production application must use a different Neon project, Vercel project, Auth0 application, secrets, and domain. Preview deployments must not inherit staging database or Auth0 secrets unless a preview-specific isolation design is approved.
+The staging deployment must remain isolated from eventual production services. The eventual production application must use a different Neon project, Vercel project, Auth0 application, secrets, and domain. Preview deployments must not inherit staging database or Auth0 secrets unless a preview-specific isolation design is approved.
 
 Vercel's Node.js 24 runtime is the target for Next.js 16.4 and Prisma 7.10. The application must remain a Node.js deployment, not a static export or Edge runtime: Auth0 sessions, the PostgreSQL adapters, Server Actions, and route handlers all require the server runtime. No `vercel.json` is needed for the current first-party Next.js deployment.
 
@@ -97,7 +97,7 @@ Treat the sequence below as the reviewed procedure for a new environment; the ex
 
 ## Environment variables
 
-Configure these directly in the future staging project's encrypted settings. Do not use a checked-in environment file and do not copy the local `.env`.
+Configure these directly in the staging project's encrypted settings. Do not use a checked-in environment file and do not copy the local `.env`.
 
 | Variable | Staging requirement |
 | --- | --- |
@@ -121,7 +121,9 @@ The two runtime URLs use Neon pooled endpoints. Each warm Vercel instance can op
 
 Run migrations once before promoting application code. Migrations are forward-only and must be backward compatible. Roll back application code by promoting the prior immutable Vercel deployment with the same Server Action encryption key. Never automatically reverse a schema migration. For data recovery, restore to an isolated Neon branch/project, validate counts and security policies, and change both runtime URLs together only after approval.
 
-Before release, choose and record backup retention, recovery-point objective, and recovery-time objective. Rehearse a restore without overwriting staging. Monitor function errors, p95 latency, 429/503 rates, database connection saturation, storage, branch health, Auth0 failures, and cleanup backlog. The committed hourly GitHub Actions cleanup remains inactive until it reaches the default branch and the `staging` environment receives the restricted `MAINTENANCE_DATABASE_URL` secret; no secret, workflow run, or cloud setting was created by this repository change.
+Before production release, choose and record backup retention, recovery-point objective, and recovery-time objective. A staging manual snapshot was restored into a separate branch on 2026-11-08, both published library listings were verified, and the branch was deleted; this did not verify full database integrity or application cutover. Recovery history is currently limited to six hours, and scheduled snapshots are unavailable on the current Neon plan.
+
+The restricted hourly GitHub Actions cleanup is active for staging. Run `42527692806` succeeded on 2026-11-08 with zero deletions from a maximum batch of 1,000. Monitoring and alerting for function errors, p95 latency, 429/503 rates, connection saturation, storage, branch health, Auth0 failures, and repeated full cleanup batches remain production blockers.
 
 ## Browser verification
 
@@ -151,8 +153,10 @@ The verifier rejects non-HTTPS origins and credential-bearing URLs, sends no coo
 - Vercel's actual `x-vercel-forwarded-for` overwrite behavior under conflicting browser-supplied forwarding headers
 - HTTPS redirect, HSTS, CSP console behavior, cookie flags, callbacks, logout, and back-channel invalidation on the final staging domain
 - Connection-pool behavior under concurrency and cold starts
-- Provider backups and an isolated restore rehearsal
-- Monitoring alerts and an approved cleanup schedule
-- The live three-session Playwright suite and a manual keyboard/mobile pass
+- Full restore integrity, private-data/RLS validation, and application cutover; the limited manual snapshot exercise verified only two published listings
+- Monitoring and alerts; the approved cleanup schedule has one successful recorded run
+- The live three-session Playwright suite, moderator approval/rejection, and a manual keyboard/mobile pass
+- An executed Vercel rollback; deployment `b508b79` is Ready and Instant Rollback is available, but neither was exercised
+- Resolution of the Vercel Node.js version override warning and Auth0 development-key warning
 
 The CSP intentionally retains `script-src 'unsafe-inline'` and inline styles for the current Next.js Cache Components/partial-prerendering architecture. It blocks external script sources and inline event attributes, but it is not nonce-level protection and cannot stop every inline-script injection. That residual risk remains a production gate.

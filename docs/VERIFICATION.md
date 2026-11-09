@@ -70,11 +70,43 @@ Local verification, 2026-11-07:
 - Production build: passed
 - Public Playwright tests: 4 passed in local Chromium, including signed-out private pages and responsive checks at 390 px and 1440 px
 - Dependency audit: 0 known vulnerabilities
-- Staging verifier: JavaScript syntax and `--help` path passed; no deployed HTTPS staging origin exists, so live checks were not run
+- Staging verifier: JavaScript syntax and `--help` path passed; at the time of this 2026-11-07 local run, no deployed HTTPS staging origin existed, so live checks were not run
 - Authenticated Playwright discovery: 5 real-session cases listed successfully when placeholder ignored paths were supplied; none were executed or counted as passed
 
-The first sandboxed integration attempt was denied loopback access with `EPERM`; the identical suite passed after local PostgreSQL access was allowed. No test or migration was run against Neon. No Vercel project or Auth0 setting was changed. The connected browser list was empty, so live Auth0 session testing remains pending.
+During that 2026-11-07 preparation run, the first sandboxed integration attempt was denied loopback access with `EPERM`; the identical suite passed after local PostgreSQL access was allowed. No test or migration was run against Neon, and no Vercel project or Auth0 setting was changed during that run. The connected browser list was empty, so live Auth0 session testing was not counted there.
 
 PR #3 GitHub Actions run #6 passed on commit `39366a5402fbe64a4144d539176d096ef298f944`. The job used the official PostgreSQL 18 image, whose service log reported PostgreSQL 18.6. It passed the server-major and least-privilege membership assertions, all committed migrations and grants, 63 unit tests, 20 PostgreSQL integration tests, ESLint, TypeScript, the production build, 4 public Chromium tests, the dependency audit, and staging-verifier syntax. Run #5 had already passed every PostgreSQL 18/database step but failed the new signed-out browser case because CI intentionally has no Auth0 configuration; the test was corrected to cover both Auth0-configured signed-out and Auth0-disabled installations before run #6.
 
-The full live-cloud evidence requirements are tracked in `docs/STAGING_CHECKLIST.md`. In particular, Neon PostgreSQL 18.6 catalog/role/RLS validation, the public HTTPS verifier, Vercel forwarded-header behavior, real-session two-account/moderator workflows, backup restore, connection load, cleanup scheduling, monitoring, and rollback remain `NOT RUN`.
+The full live-cloud evidence requirements are tracked in `docs/STAGING_CHECKLIST.md`. The 2026-11-08 evidence below supersedes the earlier `NOT RUN` statements only for the specific checks it completed; Neon catalog/RLS validation, the public HTTPS verifier, Vercel forwarded-header behavior, authenticated Playwright, moderator workflows, connection load, monitoring, alerting, full restore integrity, and executed rollback remain incomplete.
+
+## Staging live verification
+
+Environment: Vercel staging deployment, its configured Auth0 integration, and the Neon staging project
+
+Recorded: 2026-11-08
+
+Verifier: project owner using provider status records and manual application checks
+
+### Verified staging evidence
+
+- Vercel reports the staging deployment of commit `70e2bf4` as Ready.
+- Auth0 login and logout, separate accounts, Profile preferences, the public directory, Favorites, review submission and withdrawal, and report submission were manually exercised through the staging application.
+- Profile and Favorites remained isolated between two accounts through the application UI.
+- A pending review from one account was not visible to the second account.
+- GitHub Actions staging rate-limit cleanup run `42527692806` succeeded. It deleted zero expired buckets from one bounded batch with a limit of 1,000.
+- A Neon manual snapshot was restored into a separate branch. Both published library listings were verified in the restored branch, and the temporary branch was subsequently deleted.
+- Vercel reports previous deployment `b508b79` as Ready and exposes Instant Rollback for it.
+
+These are provider-reported and manual staging results. They are separate from automated local/CI results and do not count as authenticated Playwright coverage.
+
+### Incomplete staging checks and production blockers
+
+- Vercel still reports a Node.js version override warning.
+- Auth0 still reports a development-key warning.
+- Neon's available recovery history is limited to six hours, and scheduled snapshots are unavailable on the current plan.
+- The snapshot exercise verified two public listings only; full table counts, private data, RLS behavior, referential integrity, and application cutover were not verified.
+- Instant Rollback availability was confirmed, but no deployment rollback was executed.
+- Live authenticated Playwright tests and moderator approval/rejection remain unverified.
+- Production ingress-header trust, realistic load testing, monitoring, and alerting remain unverified.
+
+The staging deployment has meaningful functional and operational smoke evidence, but it is not evidence of commercial production readiness. Production still requires isolated production services and credentials, an approved recovery window and backup plan, full restore and rollback rehearsals, production ingress verification, realistic load testing, monitoring and alerting, and completed authenticated/moderator automation.
