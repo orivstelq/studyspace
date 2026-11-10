@@ -20,16 +20,10 @@ import {
     submitContentReport,
     withdrawOwnReview,
 } from "../../src/features/reviews/query";
+import { getTestDatabaseUrl, type TestDatabaseUrlKey } from "../helpers/test-database";
 
-function testClient(key: "DIRECT_URL" | "FAVORITES_DATABASE_URL" | "DATABASE_URL") {
-    const url = new URL(process.env[key] ?? "");
-    if (!["localhost", "127.0.0.1"].includes(url.hostname) || url.pathname !== "/studyspace_dev") {
-        throw new Error(`Unsafe ${key}: expected a local studyspace_dev URL`);
-    }
-    url.pathname = "/studyspace_test";
-    url.search = "";
-    url.hash = "";
-    return new PrismaClient({ adapter: new PrismaPg({ connectionString: url.toString(), max: 3 }) });
+function testClient(key: TestDatabaseUrlKey) {
+    return new PrismaClient({ adapter: new PrismaPg({ connectionString: getTestDatabaseUrl(key), max: 3 }) });
 }
 
 const identityKey = () => randomBytes(32).toString("hex");
@@ -78,6 +72,7 @@ describe("account lifecycle database foundation", () => {
             await admin.authSession.deleteMany({ where: { accountId: { in: testAccounts } } });
             await admin.userProfile.deleteMany({ where: { accountId: { in: testAccounts } } });
             await admin.favorite.deleteMany({ where: { accountId: { in: testAccounts } } });
+            await admin.moderatorGrant.deleteMany({ where: { accountId: { in: testAccounts } } });
             await admin.accountClosure.deleteMany({ where: { accountId: { in: testAccounts } } });
             await admin.accountIdentity.deleteMany({ where: { accountId: { in: testAccounts } } });
             await admin.account.deleteMany({ where: { id: { in: testAccounts } } });
@@ -88,11 +83,18 @@ describe("account lifecycle database foundation", () => {
 
     const testIdentityKeys = new Set<string>();
 
-    async function account() {
+    async function account(moderator = false) {
         const key = identityKey();
         testIdentityKeys.add(key);
-        return { key, id: (await resolveAccountIdentity(saved, key))! };
+        const id = (await resolveAccountIdentity(saved, key))!;
+        if (moderator) await admin.moderatorGrant.create({ data: { accountId: id } });
+        return { key, id };
     }
+
+    const context = (identity: { id: string; key: string }) => ({
+        accountId: identity.id,
+        ownerKey: identity.key,
+    });
 
     async function space(suffix: string) {
         return admin.studySpace.create({ data: {
@@ -110,7 +112,7 @@ describe("account lifecycle database foundation", () => {
     it("closes one account idempotently without touching another account", async () => {
         const owner = await account();
         const stranger = await account();
-        const moderator = await account();
+        const moderator = await account(true);
         const approvedSpace = await space("approved");
         const pendingSpace = await space("pending");
         const rejectedSpace = await space("rejected");
@@ -119,9 +121,9 @@ describe("account lifecycle database foundation", () => {
         const unheldHiddenSpace = await space("hidden-no-hold");
         const heldSpace = await space("held-pending");
 
-        await saveProfile(saved, owner.id, { category: "library", amenities: ["quiet"] });
-        await changeFavorite(saved, owner.id, approvedSpace.slug, true);
-        await saveProfile(saved, stranger.id, { category: "cafe", amenities: ["wifi"] });
+        await saveProfile(saved, context(owner), { category: "library", amenities: ["quiet"] });
+        await changeFavorite(saved, context(owner), approvedSpace.slug, true);
+        await saveProfile(saved, context(stranger), { category: "cafe", amenities: ["wifi"] });
         await admin.authSession.create({ data: {
             id: randomBytes(16).toString("hex"),
             subject: "fixture|owner",
@@ -132,18 +134,18 @@ describe("account lifecycle database foundation", () => {
         } });
 
         const moderatorIdentity = { accountId: moderator.id, ownerKey: moderator.key, isModerator: true } as const;
-        const approved = (await saveOwnReview(saved, owner.id, approvedSpace.slug, 5, "A retained public review with no identifying details."))!;
-        const pending = (await saveOwnReview(saved, owner.id, pendingSpace.slug, 4, "A pending review that should be removed on closure."))!;
-        const rejected = (await saveOwnReview(saved, owner.id, rejectedSpace.slug, 2, "A rejected review that should be removed on closure."))!;
-        const withdrawn = (await saveOwnReview(saved, owner.id, withdrawnSpace.slug, 3, "A withdrawn review that should be removed on closure."))!;
-        const hidden = (await saveOwnReview(saved, owner.id, hiddenSpace.slug, 3, "A hidden review retained while its report remains open."))!;
-        const unheldHidden = (await saveOwnReview(saved, owner.id, unheldHiddenSpace.slug, 3, "A hidden review without evidence should be removed."))!;
-        const held = (await saveOwnReview(saved, owner.id, heldSpace.slug, 4, "A pending review retained by a finite approved evidence hold."))!;
+        const approved = (await saveOwnReview(saved, context(owner), approvedSpace.slug, 5, "A retained public review with no identifying details."))!;
+        const pending = (await saveOwnReview(saved, context(owner), pendingSpace.slug, 4, "A pending review that should be removed on closure."))!;
+        const rejected = (await saveOwnReview(saved, context(owner), rejectedSpace.slug, 2, "A rejected review that should be removed on closure."))!;
+        const withdrawn = (await saveOwnReview(saved, context(owner), withdrawnSpace.slug, 3, "A withdrawn review that should be removed on closure."))!;
+        const hidden = (await saveOwnReview(saved, context(owner), hiddenSpace.slug, 3, "A hidden review retained while its report remains open."))!;
+        const unheldHidden = (await saveOwnReview(saved, context(owner), unheldHiddenSpace.slug, 3, "A hidden review without evidence should be removed."))!;
+        const held = (await saveOwnReview(saved, context(owner), heldSpace.slug, 4, "A pending review retained by a finite approved evidence hold."))!;
         expect(await moderateReview(saved, moderatorIdentity, approved.id, "approve")).toBe(true);
         expect(await moderateReview(saved, moderatorIdentity, rejected.id, "reject")).toBe(true);
-        expect(await withdrawOwnReview(saved, owner.id, withdrawnSpace.slug)).toBe(true);
+        expect(await withdrawOwnReview(saved, context(owner), withdrawnSpace.slug)).toBe(true);
         expect(await moderateReview(saved, moderatorIdentity, hidden.id, "approve")).toBe(true);
-        expect(await submitContentReport(saved, stranger.id, { type: "REVIEW", reviewId: hidden.id }, "INAPPROPRIATE", null)).toBe(true);
+        expect(await submitContentReport(saved, context(stranger), { type: "REVIEW", reviewId: hidden.id }, "INAPPROPRIATE", null)).toBe(true);
         expect(await moderateReview(saved, moderatorIdentity, hidden.id, "hide")).toBe(true);
         expect(await moderateReview(saved, moderatorIdentity, unheldHidden.id, "approve")).toBe(true);
         expect(await moderateReview(saved, moderatorIdentity, unheldHidden.id, "hide")).toBe(true);
@@ -186,7 +188,7 @@ describe("account lifecycle database foundation", () => {
         expect(started.status).toBe("READY");
         expect(started.revokedSessionCount).toBe(1);
         expect(await beginAccountClosure(admin, owner.key)).toEqual(started);
-        await expect(changeFavorite(saved, owner.id, approvedSpace.slug, true)).rejects.toThrow(/not active/i);
+        await expect(changeFavorite(saved, context(owner), approvedSpace.slug, true)).rejects.toThrow(/not active/i);
         await expect(finalizeLocalAccountClosure(admin, stranger.key, started.id)).rejects.toThrow(/not active/i);
 
         const completed = await finalizeLocalAccountClosure(admin, owner.key, started.id);
@@ -222,6 +224,11 @@ describe("account lifecycle database foundation", () => {
         expect(await admin.userProfile.findUnique({ where: { accountId: stranger.id } })).not.toBeNull();
 
         const moderatorClosure = await beginAccountClosure(admin, moderator.key);
+        expect(await admin.moderatorGrant.findUnique({
+            where: { accountId: moderator.id },
+            select: { revokedAt: true },
+        })).toMatchObject({ revokedAt: expect.any(Date) });
+        await expect(listModerationQueue(saved, moderatorIdentity)).rejects.toThrow(/not active/i);
         await finalizeLocalAccountClosure(admin, moderator.key, moderatorClosure.id);
         expect(await admin.review.findUnique({ where: { id: approved.id } })).toMatchObject({
             retentionReviewerAccountId: null,
@@ -231,7 +238,7 @@ describe("account lifecycle database foundation", () => {
 
     it("blocks local completion until every approved review has a human retention assessment", async () => {
         const owner = await account();
-        const moderator = await account();
+        const moderator = await account(true);
         const listing = await space("assessment-block");
         const review = await admin.review.create({ data: {
             ownerAccountId: owner.id,
@@ -259,7 +266,7 @@ describe("account lifecycle database foundation", () => {
                 },
             });
         });
-        await saveOwnReview(saved, owner.id, listing.slug, 4, "Edited approved text requires a fresh human identity assessment.");
+        await saveOwnReview(saved, context(owner), listing.slug, 4, "Edited approved text requires a fresh human identity assessment.");
         expect(await moderateReview(saved, {
             accountId: moderator.id,
             ownerKey: moderator.key,
@@ -297,7 +304,7 @@ describe("account lifecycle database foundation", () => {
         await acquired;
 
         let writeSettled = false;
-        const write = changeFavorite(saved, owner.id, listing.slug, true)
+        const write = changeFavorite(saved, context(owner), listing.slug, true)
             .finally(() => { writeSettled = true; });
         await new Promise((resolve) => setTimeout(resolve, 75));
         expect(writeSettled).toBe(false);
@@ -310,16 +317,16 @@ describe("account lifecycle database foundation", () => {
 
     it("serializes moderator approval with finalization and rechecks retention assessment", async () => {
         const owner = await account();
-        const moderator = await account();
+        const moderator = await account(true);
         const listing = await space("moderator-race");
-        const review = (await saveOwnReview(saved, owner.id, listing.slug, 5, "Approval races with closure."))!;
+        const review = (await saveOwnReview(saved, context(owner), listing.slug, 5, "Approval races with closure."))!;
         let releaseApproval!: () => void;
         let approvalLocked!: () => void;
         const held = new Promise<void>((resolve) => { releaseApproval = resolve; });
         const acquired = new Promise<void>((resolve) => { approvalLocked = resolve; });
 
         const approval = saved.$transaction(async (tx) => {
-            await tx.$queryRaw`SELECT public.set_active_account_context(${moderator.id}::uuid, true)`;
+            await tx.$queryRaw`SELECT public.set_moderator_account_context(${moderator.id}::uuid, ${moderator.key})`;
             await tx.$executeRaw`
                 UPDATE public."Review" SET "status" = 'APPROVED', "publishedAt" = now()
                 WHERE "id" = ${review.id}::uuid AND "status" = 'PENDING'
@@ -374,7 +381,7 @@ describe("account lifecycle database foundation", () => {
         const listing = await space("expand-compatibility");
         const compatibility = await saved.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT set_config('studyspace.favorite_owner', ${key}, true)`;
-            await tx.$queryRaw`SELECT set_config('studyspace.is_moderator', 'true', true)`;
+            await tx.$queryRaw`SELECT set_config('studyspace.is_moderator', 'false', true)`;
             const [favorite] = await tx.$queryRaw<{ accountId: string }[]>`
                 INSERT INTO public."Favorite" ("ownerKey", "studySpaceId")
                 VALUES (${key}, ${listing.id}::uuid)
@@ -390,6 +397,37 @@ describe("account lifecycle database foundation", () => {
                 VALUES (${key}, ${listing.id}::uuid, 5, 'Legacy review write remains compatible.', now())
                 RETURNING "id", "ownerAccountId" AS "ownerAccountId"
             `;
+            const [ownerRead] = await tx.$queryRaw<{
+                favoriteCount: bigint;
+                profileCount: bigint;
+                reviewCount: bigint;
+            }[]>`
+                SELECT
+                    (SELECT count(*) FROM public."Favorite" WHERE "ownerKey" = ${key}) AS "favoriteCount",
+                    (SELECT count(*) FROM public."UserProfile" WHERE "ownerKey" = ${key}) AS "profileCount",
+                    (SELECT count(*) FROM public."Review" WHERE "ownerKey" = ${key}) AS "reviewCount"
+            `;
+            const removedFavorite = await tx.$executeRaw`
+                DELETE FROM public."Favorite"
+                WHERE "ownerKey" = ${key} AND "studySpaceId" = ${listing.id}::uuid
+            `;
+            await tx.$executeRaw`
+                INSERT INTO public."Favorite" ("ownerKey", "studySpaceId")
+                VALUES (${key}, ${listing.id}::uuid)
+            `;
+            const [editedProfile] = await tx.$queryRaw<{ preferredCategory: string }[]>`
+                UPDATE public."UserProfile"
+                SET "preferredCategory" = 'CAFE', "updatedAt" = now()
+                WHERE "ownerKey" = ${key}
+                RETURNING "preferredCategory"::text AS "preferredCategory"
+            `;
+            const [editedReview] = await tx.$queryRaw<{ rating: number }[]>`
+                UPDATE public."Review"
+                SET "rating" = 4, "body" = 'Legacy review edit remains compatible.', "updatedAt" = now()
+                WHERE "ownerKey" = ${key} AND "studySpaceId" = ${listing.id}::uuid
+                RETURNING "rating"
+            `;
+            await tx.$queryRaw`SELECT set_config('studyspace.is_moderator', 'true', true)`;
             await tx.$executeRaw`
                 UPDATE public."Review" SET "status" = 'APPROVED', "publishedAt" = now()
                 WHERE "id" = ${review!.id}::uuid
@@ -399,12 +437,34 @@ describe("account lifecycle database foundation", () => {
                 VALUES (${key}, 'REVIEW_APPROVED', ${review!.id}::uuid)
                 RETURNING "moderatorAccountId" AS "moderatorAccountId", "targetReferenceId" AS "targetReferenceId"
             `;
-            const [report] = await tx.$queryRaw<{ reporterAccountId: string; targetReferenceId: string }[]>`
+            const [report] = await tx.$queryRaw<{ id: string; reporterAccountId: string; targetReferenceId: string }[]>`
                 INSERT INTO public."UserReport" ("reporterKey", "targetType", "listingId", "reason")
                 VALUES (${key}, 'LISTING', ${listing.id}::uuid, 'OTHER')
-                RETURNING "reporterAccountId" AS "reporterAccountId", "targetReferenceId" AS "targetReferenceId"
+                RETURNING "id", "reporterAccountId" AS "reporterAccountId", "targetReferenceId" AS "targetReferenceId"
             `;
-            return { favorite, profile, review, action, report };
+            const [moderatorRead] = await tx.$queryRaw<{
+                reviewCount: bigint;
+                reportCount: bigint;
+                actionCount: bigint;
+            }[]>`
+                SELECT
+                    (SELECT count(*) FROM public."Review" WHERE "id" = ${review!.id}::uuid) AS "reviewCount",
+                    (SELECT count(*) FROM public."UserReport" WHERE "id" = ${report!.id}::uuid) AS "reportCount",
+                    (SELECT count(*) FROM public."ModerationAction" WHERE "reviewId" = ${review!.id}::uuid) AS "actionCount"
+            `;
+            const resolved = await tx.$executeRaw`
+                UPDATE public."UserReport" SET "status" = 'RESOLVED', "resolvedAt" = now()
+                WHERE "id" = ${report!.id}::uuid AND "status" = 'OPEN'
+            `;
+            const [resolutionAction] = await tx.$queryRaw<{ targetReferenceId: string }[]>`
+                INSERT INTO public."ModerationAction" ("moderatorKey", "action", "reportId")
+                VALUES (${key}, 'REPORT_RESOLVED', ${report!.id}::uuid)
+                RETURNING "targetReferenceId" AS "targetReferenceId"
+            `;
+            return {
+                favorite, profile, review, action, report, ownerRead, editedProfile,
+                editedReview, moderatorRead, removedFavorite, resolved, resolutionAction,
+            };
         });
         expect(compatibility.favorite?.accountId).toBeTruthy();
         expect(compatibility.profile?.accountId).toBe(compatibility.favorite?.accountId);
@@ -417,6 +477,30 @@ describe("account lifecycle database foundation", () => {
             reporterAccountId: compatibility.favorite?.accountId,
             targetReferenceId: listing.id,
         });
+        expect({
+            favoriteCount: Number(compatibility.ownerRead?.favoriteCount),
+            profileCount: Number(compatibility.ownerRead?.profileCount),
+            reviewCount: Number(compatibility.ownerRead?.reviewCount),
+        }).toEqual({
+            favoriteCount: 1,
+            profileCount: 1,
+            reviewCount: 1,
+        });
+        expect(compatibility.editedProfile?.preferredCategory).toBe("CAFE");
+        expect(compatibility.editedReview?.rating).toBe(4);
+        expect(compatibility.removedFavorite).toBe(1);
+        expect({
+            reviewCount: Number(compatibility.moderatorRead?.reviewCount),
+            reportCount: Number(compatibility.moderatorRead?.reportCount),
+            actionCount: Number(compatibility.moderatorRead?.actionCount),
+        }).toEqual({
+            reviewCount: 1,
+            reportCount: 1,
+            actionCount: 1,
+        });
+        expect(compatibility.resolved).toBe(1);
+        expect(compatibility.resolutionAction?.targetReferenceId).toBe(compatibility.report?.id);
+        expect(await listApprovedReviews(discovery, listing.id)).toHaveLength(1);
 
         const [stored] = await admin.$queryRaw<{ ownerKey: string }[]>`
             SELECT "ownerKey" AS "ownerKey" FROM public."UserProfile"
@@ -428,7 +512,7 @@ describe("account lifecycle database foundation", () => {
     it("rejects direct Account deletion while actor references remain", async () => {
         const owner = await account();
         const listing = await space("account-delete-restrict");
-        await saveOwnReview(saved, owner.id, listing.slug, 4, "The account relation must be restrictive.");
+        await saveOwnReview(saved, context(owner), listing.slug, 4, "The account relation must be restrictive.");
         await admin.accountIdentity.deleteMany({ where: { accountId: owner.id } });
         await expect(admin.account.delete({ where: { id: owner.id } })).rejects.toThrow();
         expect(await admin.account.findUnique({ where: { id: owner.id } })).not.toBeNull();

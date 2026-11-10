@@ -7,37 +7,11 @@ import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../src/generated/prisma/client";
 import { queryPublishedSpaceBySlug, queryPublishedSpaces, queryRecommendationCandidates } from "../../src/features/discovery/query";
-
-function getTestUrl(
-    key: "DIRECT_URL" | "DATABASE_URL",
-): string {
-    const value = process.env[key];
-
-    if (!value) {
-        throw new Error(`${key} is missing`);
-    }
-
-    const url = new URL(value);
-
-    if (
-        !["localhost", "127.0.0.1"].includes(url.hostname) ||
-        url.pathname !== "/studyspace_dev"
-    ) {
-        throw new Error(
-            `Unsafe ${key}: expected local studyspace_dev`,
-        );
-    }
-
-    url.pathname = "/studyspace_test";
-    url.search = "";
-    url.hash = "";
-
-    return url.toString();
-}
+import { getTestDatabaseUrl } from "../helpers/test-database";
 
 describe("Published study spaces repository", () => {
-    const migrationUrl = getTestUrl("DIRECT_URL");
-    const applicationUrl = getTestUrl("DATABASE_URL");
+    const migrationUrl = getTestDatabaseUrl("DIRECT_URL");
+    const applicationUrl = getTestDatabaseUrl("DATABASE_URL");
 
     const migrationPool = new Pool({
         connectionString: migrationUrl,

@@ -1,10 +1,10 @@
 # StudySpace — Account lifecycle and deletion design
 
-Status: Phase 17A database foundation implemented locally; no user-facing or cloud deletion workflow
+Status: Phase 17 database foundation implemented and rehearsed; no user-facing or cloud deletion workflow
 
 Public support and privacy contact: [sidstelq11@gmail.com](mailto:sidstelq11@gmail.com).
 
-The Phase 17A foundation migration and its two forward hardening migrations, together with owner-only repository operations, now implement the local database foundation. They have been exercised only against the isolated local test database and have not been applied to Neon. There is still no account-deletion route, button, dedicated lifecycle login, Auth0 Management API integration, provider-completion worker, or retention-cleanup schedule. The approved dispositions below remain engineering requirements, not a public claim that deletion is available.
+The Phase 17 expand migrations, authorization hardening, and owner-only repository operations implement the database foundation. They have been exercised against isolated local PostgreSQL 17 and 18 databases and a disposable Neon PostgreSQL 18 branch. They have not been applied to the parent staging branch. There is still no account-deletion route, button, dedicated lifecycle login, Auth0 Management API integration, provider-completion worker, or retention-cleanup schedule. The approved dispositions below remain engineering requirements, not a public claim that deletion is available.
 
 ## Current identity and data boundary
 
@@ -71,7 +71,7 @@ It is a policy regression aid, not authorization, an execution plan, or proof th
 
 - identity resolution creates or returns an `ACTIVE` random account generation under an advisory and row lock;
 - every Profile, Favorite, review, report, moderation, and session transaction locks the acting account and fails unless it is `ACTIVE`;
-- `beginAccountClosure` locks the verified identity's account, marks it `CLOSING`, creates the one-per-generation closure record, and revokes mapped sessions;
+- `beginAccountClosure` locks the verified identity's account, marks it `CLOSING`, creates the one-per-generation closure record, revokes mapped sessions, and revokes any active database moderator grant;
 - `finalizeLocalAccountClosure` verifies the same identity belongs to the opaque closure ID, locks all owned review rows, blocks on any unassessed approved review, performs all local dispositions in one transaction, unlinks every mapped identity, and stops at `PROVIDER_PENDING`;
 - moderator approval is rejected for an unlinked or inactive review owner, so a held non-public review cannot later become public;
 - changing review text clears any prior retention assessment in a database trigger, so later reapproval requires a fresh human assessment before closure can retain the text;
@@ -98,7 +98,7 @@ Idempotency must be database-enforced by one closure request per account generat
 
 ## Expand/migrate/contract rollout — implemented locally through expand, cloud approval required
 
-The unpublished Phase 17 migrations are an **expand** release. They retain the deployed `ownerKey`, `reporterKey`, and `moderatorKey` columns, backfill random account IDs, and install compatibility triggers that validate and dual-write both representations. The old application can therefore continue reading and writing while migrations run, and the new application can use account IDs after all migrations and runtime grants succeed. The public role still receives only the six approved Review columns.
+The unpublished Phase 17 migrations are an **expand** release. They retain the deployed `ownerKey`, `reporterKey`, and `moderatorKey` columns, backfill random account IDs, and install compatibility triggers that validate and dual-write both representations. The old application can therefore continue reading and writing while migrations run, and the new application can use account IDs after all migrations and runtime grants succeed. The authorization hardening migration adds private `ModeratorGrant` records, replaces the runtime-callable UUID/boolean context function with account/digest verification, and requires the database grant in addition to the Auth0 allowlist. The public role still receives only the six approved Review columns.
 
 Required order:
 
@@ -107,7 +107,8 @@ Required order:
 3. Run catalog verification plus old-application smoke checks for Profile, Favorites, review/report submission, and moderation. Verify active legacy rows have matching account IDs.
 4. Deploy the Phase 17 application with account closure still inaccessible. Verify new sessions, legacy sessions, two-account isolation, moderation, and the passive/fresh identity split.
 5. Keep the compatibility columns and triggers through the observation period. During this period an application rollback to the previous release remains schema-compatible.
-6. Only after no old deployment or rollback depends on legacy columns may a separately reviewed **contract** migration remove them and simplify compatibility policies. That migration is intentionally not present in Phase 17C.
+6. During that same window, legacy policy branches still accept the deployed application's raw transaction settings. Treat the private runtime credential as privileged and monitor access; these branches are a rollback bridge, not authenticated identity evidence.
+7. Only after no old deployment or rollback depends on legacy columns may a separately reviewed **contract** migration remove them, remove the raw-setting policy branches, and simplify compatibility policies. That migration is intentionally not present in Phase 17.
 
 New application code is intentionally not compatible with the pre-expand schema; the deployment gate is migration-first. Old-code/new-expanded-schema compatibility is integration-tested. After a future contract migration, rollback means a forward application fix, not redeploying legacy code.
 
@@ -124,17 +125,17 @@ The local migration implements the reviewed random account-generation design:
 5. Give `ModerationAction` an immutable target reference independent of its optional review/report foreign key. Change target foreign keys to permit the referenced private evidence to expire without deleting the audit event or keeping a report past 90 days.
 6. Add retention-hold metadata with a bounded reason, case reference, approval, review date, and expiry. No generic indefinite hold is allowed.
 7. Move RLS context from the deterministic owner key to the random account ID and require an `ACTIVE` account for all private writes. Public review policies remain restricted to approved rows and public fields.
-8. Identity resolution and account-context functions use fixed search paths, owner execution, input validation, and exact `EXECUTE` grants to `studyspace_saved`. Destructive closure is not a security-definer function and has no runtime grant or route. A separate NOLOGIN lifecycle permission role and environment-specific login remain required before any deployed worker can call it.
+8. Identity resolution and account-context functions use fixed search paths, owner execution, input validation, and exact `EXECUTE` grants to `studyspace_saved`. Normal context requires a matching active account/digest pair; moderator context additionally requires an unrevoked private `ModeratorGrant`. Because the application shares one database login, these checks prevent accidental and application-path escalation but do not authenticate the human caller independently of the trusted server credential. Destructive closure is not a security-definer function and has no runtime grant or route. A separate NOLOGIN lifecycle permission role and environment-specific login remain required before any deployed worker can call it.
 9. Preserve the public role's column-level Review grants for only `id`, `studySpaceId`, `rating`, `body`, `status`, and `publishedAt`, while RLS continues to enforce approved-row visibility. Test denial of actor, lifecycle, assessment, and internal timestamp columns directly with the runtime login.
 10. Update default privileges and staging catalog verification so the new tables and function are denied to public/runtime roles except for the exact grants reviewed above.
 
-This design resolves re-registration and collision risks better than replacing keys with a shared tombstone. It is a schema and authorization change: the migration was applied only to `studyspace_test`. It still requires a populated-data rehearsal, Neon migration review, backup approval, and explicit owner approval before staging or production application.
+This design resolves re-registration and collision risks better than replacing keys with a shared tombstone. The expand chain preserved populated synthetic legacy data in disposable PostgreSQL 18 and Neon rehearsals. Applying it to the parent staging branch or any production environment still requires backup/recovery review, exact pending-migration checks, and explicit owner approval.
 
 ## Re-registration, linked identities, moderators, and holds
 
 - **Re-registration:** identity resolution returns `NULL` while the prior closure is `PROVIDER_PENDING`. Only a separately verified provider-completion process may mark it `COMPLETE`; a later verified login can then create the next generation. Retained rows have `NULL` actor associations and cannot be reclaimed by that generation.
 - **Linked identities:** close every identity already mapped to the same internal account and revoke all of their application sessions. Do not expand deletion by matching email addresses. Auth0-linked identities that the application has never mapped require verified Auth0 Management API behavior; until then, public promises must be limited to the identity/account boundary actually verified.
-- **Moderator accounts:** before local closure, an operator must remove every mapped subject from `AUTH0_MODERATOR_SUBJECTS` and deploy that revocation. Closure then unlinks the moderator actor while preserving the action/target/time for the approved retention window. Re-registration does not restore moderator status.
+- **Moderator accounts:** an operator provisions `ModeratorGrant` only after matching a verified Auth0 subject to its active random account generation. Local closure revokes that grant transactionally; the operator must also remove every mapped subject from `AUTH0_MODERATOR_SUBJECTS` and deploy the application-side revocation. Closure then unlinks the moderator actor while preserving the action/target/time for the approved retention window. Re-registration creates a new account generation and does not inherit the grant or moderator status.
 - **Holds:** a hold never preserves account ownership. It delays deletion only for the minimum evidence and only until its documented deadline. Resolved reports still have the firm 90-day maximum; audit exceptions beyond 180 days require specific approval and periodic review.
 
 ## Auth0, Google, and backup limits
@@ -173,4 +174,4 @@ Before the workflow can be enabled, tests must prove:
 - moderator allowlist revocation and linked-identity handling work with real Auth0 accounts;
 - a full isolated backup restore re-applies completed closures before serving traffic.
 
-Explicit approval is still required to apply the migration outside `studyspace_test`, create the dedicated lifecycle identity and grants, expose a reauthenticated confirmation flow, add Auth0 Management API access and a retryable provider outbox, implement retention cleanup functions and schedules, verify linked identities and moderator revocation, approve backup/recovery behavior and public policy wording, and perform any first live deletion. No staging or production deletion should be attempted before those gates are satisfied.
+Explicit approval is still required to apply the migrations to the parent staging branch or production, create the dedicated lifecycle identity and grants, expose a reauthenticated confirmation flow, add Auth0 Management API access and a retryable provider outbox, implement retention cleanup functions and schedules, verify linked identities and moderator revocation, approve backup/recovery behavior and public policy wording, and perform any first live deletion. No staging or production deletion should be attempted before those gates are satisfied.

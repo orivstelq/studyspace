@@ -82,9 +82,17 @@ describe("review, report, and moderation actions", () => {
 
     it("uses the verified owner for review and report writes", async () => {
         expect(await updateReview(null, reviewForm())).toMatch(/approval/);
-        expect(mocks.save).toHaveBeenCalledWith("private-db", "verified-account", "test-space", 4, "A useful and sufficiently detailed review.");
+        expect(mocks.save).toHaveBeenCalledWith("private-db", {
+            accountId: "verified-account",
+            ownerKey: "verified-owner",
+            isModerator: false,
+        }, "test-space", 4, "A useful and sufficiently detailed review.");
         expect(await submitReport(null, reportForm())).toMatch(/privately/);
-        expect(mocks.report).toHaveBeenCalledWith("private-db", "verified-account", { type: "LISTING", slug: "test-space" }, "INACCURATE", "The listed hours are no longer current.");
+        expect(mocks.report).toHaveBeenCalledWith("private-db", {
+            accountId: "verified-account",
+            ownerKey: "verified-owner",
+            isModerator: false,
+        }, { type: "LISTING", slug: "test-space" }, "INACCURATE", "The listed hours are no longer current.");
     });
 
     it("enforces mutation rate limits before database writes", async () => {

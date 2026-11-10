@@ -6,6 +6,11 @@ const AUDIT_RETENTION_MS = 180 * DAY_MS;
 
 type Database = Pick<PrismaClient, "$transaction">;
 
+export interface AccountContext {
+    accountId: string;
+    ownerKey: string;
+}
+
 export class InactiveAccountError extends Error {
     constructor() {
         super("Account is not active.");
@@ -28,12 +33,22 @@ export async function lookupActiveAccountIdentityInTransaction(tx: Prisma.Transa
 
 export async function setActiveAccountContextInTransaction(
     tx: Prisma.TransactionClient,
-    accountId: string,
+    identity: AccountContext,
     isModerator: boolean,
 ) {
-    const [row] = await tx.$queryRaw<{ active: boolean }[]>`
-        SELECT public.set_active_account_context(${accountId}::uuid, ${isModerator}) AS active
-    `;
+    const [row] = isModerator
+        ? await tx.$queryRaw<{ active: boolean }[]>`
+            SELECT public.set_moderator_account_context(
+                ${identity.accountId}::uuid,
+                ${identity.ownerKey}
+            ) AS active
+        `
+        : await tx.$queryRaw<{ active: boolean }[]>`
+            SELECT public.set_active_account_context(
+                ${identity.accountId}::uuid,
+                ${identity.ownerKey}
+            ) AS active
+        `;
     return row?.active === true;
 }
 
@@ -103,6 +118,10 @@ export function beginAccountClosure(db: Database, identityKey: string, now = new
         await tx.account.update({
             where: { id: identity.accountId },
             data: { state: "CLOSING", closingAt: now },
+        });
+        await tx.moderatorGrant.updateMany({
+            where: { accountId: identity.accountId, revokedAt: null },
+            data: { revokedAt: now },
         });
         const revoked = await tx.authSession.deleteMany({ where: { accountId: identity.accountId } });
         const unassessedPublishedReviews = await tx.review.count({

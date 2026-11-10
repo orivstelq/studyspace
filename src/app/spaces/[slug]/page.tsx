@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { FavoriteButton } from "@/features/favorites/favorite-button";
 import { hasFavorite } from "@/features/favorites/query";
-import { getActiveAccountId, getAuthClient } from "@/lib/auth/auth";
+import { getAuthClient, getAuthIdentity } from "@/lib/auth/auth";
 import { privateDatabase } from "@/lib/db/private-client";
 
 import { publicSourceUrl, sourceLabels } from "@/features/discovery/provenance";
@@ -30,18 +30,18 @@ export const metadata: Metadata = {
 
 async function FavoriteControl({ id, slug, name }: { id: string; slug: string; name: string }) {
     if (!getAuthClient()) return null;
-    let owner: string | null;
+    let identity: Awaited<ReturnType<typeof getAuthIdentity>>;
     let saved: boolean;
 
     try {
-        owner = await getActiveAccountId();
-        saved = owner ? await hasFavorite(privateDatabase(), owner, id) : false;
+        identity = await getAuthIdentity();
+        saved = identity ? await hasFavorite(privateDatabase(), identity, id) : false;
     } catch (error) {
         console.error("Saved state unavailable:", error instanceof Error ? error.name : "Unknown error");
         return <p className="text-sm text-muted">Saving is temporarily unavailable.</p>;
     }
 
-    if (!owner) {
+    if (!identity) {
         return <a href="/auth/login" className="inline-flex min-h-11 items-center font-semibold text-harbor underline">Sign in to save</a>;
     }
     return <FavoriteButton slug={slug} name={name} saved={saved} />;

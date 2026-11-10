@@ -13,6 +13,14 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 | Neon recovery exercise | A manual snapshot was restored into a separate branch; both published library listings were verified, then the temporary branch was deleted. | This was not a full database integrity, private-data, RLS, or application cutover test. Recovery history is limited to six hours and scheduled snapshots are unavailable on the current plan. |
 | Rollback control | Previous Vercel deployment `b508b79` is Ready and Instant Rollback is available. | No rollback was executed, so rollback remains `NOT RUN`. |
 
+## Recorded Phase 17 disposable rehearsal evidence — 2026-11-10
+
+| Evidence | Recorded result | Scope limitation |
+| --- | --- | --- |
+| Disposable Neon migration rehearsal | All 14 migrations and runtime grants were applied to `rehearsal-account-lifecycle` (`br-cold-king-beer2yusy`) in `studyspace_staging`. | The parent staging branch was not changed; this is not deployment approval. |
+| Runtime boundary | Public/Saved permissions, two synthetic-account isolation, legacy ownership mappings, 12 verified-context policies, seven legacy-compatibility policies, no-grant moderator denial, and denial of the retired UUID/boolean context function passed. | Catalog and grant checks are not executed old-application behavior. Positive/revoked moderator grants were verified only in local integration tests. |
+| Compatibility | Local PostgreSQL integration tests executed legacy Profile, Favorite, Review, report, and moderation reads and writes against the expanded schema. | The baseline application binary and live Vercel/Auth0 flows were not run against the disposable branch. |
+
 ## Source and build
 
 | Status | Gate | Required evidence |

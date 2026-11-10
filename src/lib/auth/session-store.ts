@@ -20,7 +20,8 @@ export function createSessionStore(database = privateDatabase): SessionDataStore
                 if (!row || row.expiresAt.getTime() <= Date.now()) return null;
 
                 let accountId = row.accountId;
-                const verifiedAccountId = await lookupActiveAccountIdentityInTransaction(tx, identityKey(row.subject));
+                const ownerKey = identityKey(row.subject);
+                const verifiedAccountId = await lookupActiveAccountIdentityInTransaction(tx, ownerKey);
                 if (!verifiedAccountId || (accountId && accountId !== verifiedAccountId)) return null;
                 if (!accountId) {
                     accountId = verifiedAccountId;
@@ -29,7 +30,7 @@ export function createSessionStore(database = privateDatabase): SessionDataStore
                         data: { accountId },
                     });
                 }
-                if (!await setActiveAccountContextInTransaction(tx, accountId, false)) return null;
+                if (!await setActiveAccountContextInTransaction(tx, { accountId, ownerKey }, false)) return null;
 
                 return {
                     user: {
@@ -68,10 +69,11 @@ export function createSessionStore(database = privateDatabase): SessionDataStore
                 if (!existing || existing.subject !== session.user.sub) return false;
 
                 let accountId = existing.accountId;
-                const verifiedAccountId = await lookupActiveAccountIdentityInTransaction(tx, identityKey(session.user.sub));
+                const ownerKey = identityKey(session.user.sub);
+                const verifiedAccountId = await lookupActiveAccountIdentityInTransaction(tx, ownerKey);
                 if (!verifiedAccountId || (accountId && accountId !== verifiedAccountId)) return false;
                 accountId ??= verifiedAccountId;
-                if (!await setActiveAccountContextInTransaction(tx, accountId, false)) return false;
+                if (!await setActiveAccountContextInTransaction(tx, { accountId, ownerKey }, false)) return false;
                 const result = await tx.authSession.updateMany({
                     where: { id, OR: [{ accountId }, { accountId: null }] },
                     data: sessionFields(session, accountId),

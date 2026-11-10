@@ -5,19 +5,13 @@ import { vi } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../src/generated/prisma/client";
 import { enforceRateLimit, rateLimitKey } from "../../src/lib/security/rate-limit";
+import { getTestDatabaseUrl, type TestDatabaseUrlKey } from "../helpers/test-database";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/private-client", () => ({ privateDatabase: vi.fn() }));
 
-function testClient(key: "DIRECT_URL" | "FAVORITES_DATABASE_URL" | "DATABASE_URL") {
-    const url = new URL(process.env[key] ?? "");
-    if (!["localhost", "127.0.0.1"].includes(url.hostname) || url.pathname !== "/studyspace_dev") {
-        throw new Error(`Unsafe ${key}: expected a local studyspace_dev URL`);
-    }
-    url.pathname = "/studyspace_test";
-    url.search = "";
-    url.hash = "";
-    return new PrismaClient({ adapter: new PrismaPg({ connectionString: url.toString(), max: 8 }) });
+function testClient(key: TestDatabaseUrlKey) {
+    return new PrismaClient({ adapter: new PrismaPg({ connectionString: getTestDatabaseUrl(key), max: 8 }) });
 }
 
 describe("shared PostgreSQL rate limiting", () => {

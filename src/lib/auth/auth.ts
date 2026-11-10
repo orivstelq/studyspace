@@ -38,10 +38,6 @@ export function getAuthClient() {
     return client;
 }
 
-export async function getActiveAccountId() {
-    return (await getAuthIdentity())?.accountId ?? null;
-}
-
 export async function getAuthIdentity() {
     const session = await getAuthClient()?.getSession();
     if (!session?.user.sub) return null;

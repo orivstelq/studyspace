@@ -10,7 +10,7 @@ export async function CommunityReviews({ studySpaceId, slug }: { studySpaceId: s
     const identity = auth ? await getAuthIdentity() : null;
     const [reviews, ownReview] = await Promise.all([
         listApprovedReviews(publicDatabase(), studySpaceId),
-        identity ? getOwnReview(privateDatabase(), identity.accountId, studySpaceId) : Promise.resolve(null),
+        identity ? getOwnReview(privateDatabase(), identity, studySpaceId) : Promise.resolve(null),
     ]);
 
     return (

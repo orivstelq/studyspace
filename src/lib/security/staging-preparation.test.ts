@@ -79,7 +79,11 @@ describe("staging preparation", () => {
         expect(script).toContain('"accountId" = account_a AND "studySpaceId" = space_id');
         expect(script).toContain('"accountId" = account_b AND "studySpaceId" = space_id');
         expect(script).toContain("public.resolve_account_identity(owner_a)");
-        expect(script).toContain("public.set_active_account_context(account_a, false)");
+        expect(script).toContain("public.set_active_account_context(account_a, owner_a)");
+        expect(script).toContain("public.set_active_account_context(account_b, owner_b)");
+        expect(script).toContain("public.set_active_account_context(uuid,text)");
+        expect(script).toContain("public.set_moderator_account_context(uuid,text)");
+        expect(script).toContain("public.set_active_account_context(uuid,boolean)");
         expect(script).not.toContain("TRUNCATE");
         expect(script).not.toContain("COMMIT;");
         expect(script.trimEnd().endsWith("ROLLBACK;")).toBe(true);

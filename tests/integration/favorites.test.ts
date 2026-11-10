@@ -5,16 +5,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../src/generated/prisma/client";
 import { changeFavorite, hasFavorite, listFavorites } from "../../src/features/favorites/query";
 import { resolveAccountIdentity } from "../../src/features/account-lifecycle/repository";
+import { getTestDatabaseUrl, type TestDatabaseUrlKey } from "../helpers/test-database";
 
-function testClient(key: "DIRECT_URL" | "FAVORITES_DATABASE_URL" | "DATABASE_URL") {
-    const url = new URL(process.env[key] ?? "");
-    if (!["localhost", "127.0.0.1"].includes(url.hostname) || url.pathname !== "/studyspace_dev") {
-        throw new Error(`Unsafe ${key}: expected a local studyspace_dev URL`);
-    }
-    url.pathname = "/studyspace_test";
-    url.search = "";
-    url.hash = "";
-    return new PrismaClient({ adapter: new PrismaPg({ connectionString: url.toString(), max: 2 }) });
+function testClient(key: TestDatabaseUrlKey) {
+    return new PrismaClient({ adapter: new PrismaPg({ connectionString: getTestDatabaseUrl(key), max: 2 }) });
 }
 
 describe("Saved persistence and isolation", () => {
@@ -29,6 +23,8 @@ describe("Saved persistence and isolation", () => {
     let owner: string;
     let stranger: string;
     let spaceId: string;
+    const ownerContext = () => ({ accountId: owner, ownerKey });
+    const strangerContext = () => ({ accountId: stranger, ownerKey: strangerKey });
 
     beforeAll(async () => {
         owner = (await resolveAccountIdentity(saved, ownerKey))!;
@@ -50,23 +46,23 @@ describe("Saved persistence and isolation", () => {
     });
 
     it("keeps favorites private, idempotent, and limited to published listings", async () => {
-        expect(await changeFavorite(saved, owner, draftSlug, true)).toBe(false);
-        expect(await changeFavorite(saved, owner, `${slug}-missing`, true)).toBe(false);
-        await Promise.all([changeFavorite(saved, owner, slug, true), changeFavorite(saved, owner, slug, true)]);
-        expect(await hasFavorite(saved, owner, spaceId)).toBe(true);
-        expect(await hasFavorite(saved, stranger, spaceId)).toBe(false);
-        expect((await listFavorites(saved, owner, 1)).spaces.map((space) => space.slug)).toEqual([slug]);
-        expect((await listFavorites(saved, stranger, 1)).spaces).toEqual([]);
+        expect(await changeFavorite(saved, ownerContext(), draftSlug, true)).toBe(false);
+        expect(await changeFavorite(saved, ownerContext(), `${slug}-missing`, true)).toBe(false);
+        await Promise.all([changeFavorite(saved, ownerContext(), slug, true), changeFavorite(saved, ownerContext(), slug, true)]);
+        expect(await hasFavorite(saved, ownerContext(), spaceId)).toBe(true);
+        expect(await hasFavorite(saved, strangerContext(), spaceId)).toBe(false);
+        expect((await listFavorites(saved, ownerContext(), 1)).spaces.map((space) => space.slug)).toEqual([slug]);
+        expect((await listFavorites(saved, strangerContext(), 1)).spaces).toEqual([]);
         expect(await saved.favorite.findMany()).toEqual([]);
         await expect(saved.favorite.create({ data: { accountId: stranger, studySpaceId: spaceId } })).rejects.toThrow();
-        await changeFavorite(saved, stranger, slug, false);
-        expect(await hasFavorite(saved, owner, spaceId)).toBe(true);
+        await changeFavorite(saved, strangerContext(), slug, false);
+        expect(await hasFavorite(saved, ownerContext(), spaceId)).toBe(true);
 
         await admin.studySpace.update({ where: { id: spaceId }, data: { status: "ARCHIVED" } });
-        expect((await listFavorites(saved, owner, 1)).spaces).toEqual([]);
-        await changeFavorite(saved, owner, slug, false);
-        await changeFavorite(saved, owner, slug, false);
-        expect(await hasFavorite(saved, owner, spaceId)).toBe(false);
+        expect((await listFavorites(saved, ownerContext(), 1)).spaces).toEqual([]);
+        await changeFavorite(saved, ownerContext(), slug, false);
+        await changeFavorite(saved, ownerContext(), slug, false);
+        expect(await hasFavorite(saved, ownerContext(), spaceId)).toBe(false);
     });
 
     it("keeps the discovery role out of private tables and the Saved role read-only for listings", async () => {
@@ -77,6 +73,7 @@ describe("Saved persistence and isolation", () => {
         await expect(saved.accountIdentity.findMany()).rejects.toThrow();
         await expect(saved.accountClosure.findMany()).rejects.toThrow();
         await expect(saved.retentionHold.findMany()).rejects.toThrow();
+        await expect(saved.moderatorGrant.findMany()).rejects.toThrow();
         await expect(saved.studySpace.update({ where: { id: spaceId }, data: { name: "Unauthorized" } })).rejects.toThrow();
     });
 });

@@ -53,7 +53,10 @@ BEGIN
        OR NOT has_table_privilege(session_user, 'public."Favorite"', 'DELETE')
        OR NOT has_function_privilege(session_user, 'public.resolve_account_identity(text)', 'EXECUTE')
        OR NOT has_function_privilege(session_user, 'public.lookup_active_account_identity(text)', 'EXECUTE')
-       OR NOT has_function_privilege(session_user, 'public.set_active_account_context(uuid,boolean)', 'EXECUTE')
+       OR NOT has_function_privilege(session_user, 'public.set_active_account_context(uuid,text)', 'EXECUTE')
+       OR NOT has_function_privilege(session_user, 'public.set_moderator_account_context(uuid,text)', 'EXECUTE')
+       OR has_function_privilege(session_user, 'public.set_active_account_context(uuid,boolean)', 'EXECUTE')
+       OR has_table_privilege(session_user, 'public."ModeratorGrant"', 'SELECT')
        OR NOT EXISTS (
            SELECT 1
            FROM pg_catalog.pg_class AS relation
@@ -93,7 +96,7 @@ BEGIN
         RAISE EXCEPTION 'fictional probe accounts were not isolated';
     END IF;
 
-    IF NOT public.set_active_account_context(account_a, false) THEN
+    IF NOT public.set_active_account_context(account_a, owner_a) THEN
         RAISE EXCEPTION 'owner A account context was rejected';
     END IF;
     IF EXISTS (SELECT 1 FROM public."Favorite" WHERE "accountId" = account_a AND "studySpaceId" = space_id) THEN
@@ -110,7 +113,7 @@ BEGIN
         NULL;
     END;
 
-    IF NOT public.set_active_account_context(account_b, false) THEN
+    IF NOT public.set_active_account_context(account_b, owner_b) THEN
         RAISE EXCEPTION 'owner B account context was rejected';
     END IF;
     IF EXISTS (SELECT 1 FROM public."Favorite" WHERE "accountId" = account_a AND "studySpaceId" = space_id) THEN
@@ -126,7 +129,7 @@ BEGIN
         RAISE EXCEPTION 'owner B deleted owner A data';
     END IF;
 
-    IF NOT public.set_active_account_context(account_a, false) THEN
+    IF NOT public.set_active_account_context(account_a, owner_a) THEN
         RAISE EXCEPTION 'owner A account context was rejected on retry';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM public."Favorite" WHERE "accountId" = account_a AND "studySpaceId" = space_id) THEN
@@ -148,7 +151,7 @@ BEGIN
         RAISE EXCEPTION 'owner A cleanup failed';
     END IF;
 
-    IF NOT public.set_active_account_context(account_b, false) THEN
+    IF NOT public.set_active_account_context(account_b, owner_b) THEN
         RAISE EXCEPTION 'owner B account context was rejected on cleanup';
     END IF;
     DELETE FROM public."Favorite" WHERE "accountId" = account_b AND "studySpaceId" = space_id;

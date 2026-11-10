@@ -93,6 +93,7 @@ model Account {
   retentionReviewedReviews Review[]           @relation("ReviewRetentionReviewer")
   reports                  UserReport[]       @relation("ReportReporter")
   moderationActions        ModerationAction[] @relation("ModerationActor")
+  moderatorGrant           ModeratorGrant?
 
   @@index([state])
 }
@@ -126,6 +127,14 @@ model AccountClosure {
   retainedReviewCount     Int                  @default(0)
   unlinkedReportCount     Int                  @default(0)
   unlinkedModerationCount Int                  @default(0)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+}
+
+model ModeratorGrant {
+  accountId String    @id @db.Uuid
+  grantedAt DateTime  @default(now())
+  revokedAt DateTime?
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
 }

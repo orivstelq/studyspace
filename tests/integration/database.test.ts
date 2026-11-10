@@ -1,48 +1,25 @@
 
 import "dotenv/config";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
-
-function testDatabaseUrl(key: "DIRECT_URL" | "DATABASE_URL") {
-    const value = process.env[key];
-
-    if (!value) {
-        throw new Error(`${key} is missing`);
-    }
-
-    const url = new URL(value);
-
-    // Safety: integration tests must only use local development
-    // credentials and the dedicated test database.
-    if (
-        !["localhost", "127.0.0.1"].includes(url.hostname) ||
-        url.pathname !== "/studyspace_dev"
-    ) {
-        throw new Error(
-            `Unsafe ${key}: expected local studyspace_dev URL`,
-        );
-    }
-
-    url.pathname = "/studyspace_test";
-    url.search = "";
-    url.hash = "";
-    return url.toString();
-}
+import { getTestDatabaseName, getTestDatabaseUrl } from "../helpers/test-database";
 
 describe("StudySpace PostgreSQL integration", () => {
+    const testDatabaseName = getTestDatabaseName();
     let migrationPool: Pool;
     let applicationPool: Pool;
 
     beforeAll(async () => {
         migrationPool = new Pool({
-            connectionString: testDatabaseUrl("DIRECT_URL"),
+            connectionString: getTestDatabaseUrl("DIRECT_URL"),
             max: 2,
         });
 
         applicationPool = new Pool({
-            connectionString: testDatabaseUrl("DATABASE_URL"),
+            connectionString: getTestDatabaseUrl("DATABASE_URL"),
             max: 2,
         });
 
@@ -56,10 +33,10 @@ describe("StudySpace PostgreSQL integration", () => {
                    pg_has_role(current_user, 'studyspace_app', 'MEMBER') AS app_member
         `);
 
-        expect(migration.rows[0].database).toBe("studyspace_test");
+        expect(migration.rows[0].database).toBe(testDatabaseName);
         expect(migration.rows[0].role).not.toBe("studyspace_app");
 
-        expect(application.rows[0].database).toBe("studyspace_test");
+        expect(application.rows[0].database).toBe(testDatabaseName);
         expect(application.rows[0].role).not.toBe(migration.rows[0].role);
         expect(application.rows[0].app_member).toBe(true);
     });
@@ -92,6 +69,37 @@ describe("StudySpace PostgreSQL integration", () => {
             can_update: false,
             can_delete: false,
         });
+    });
+
+    it("matches the complete committed migration history", async () => {
+        const expected = readdirSync("prisma/migrations", { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => ({
+                name: entry.name,
+                checksum: createHash("sha256")
+                    .update(readFileSync(`prisma/migrations/${entry.name}/migration.sql`))
+                    .digest("hex"),
+            }))
+            .sort((left, right) => left.name.localeCompare(right.name));
+        const applied = await migrationPool.query<{
+            migration_name: string;
+            checksum: string;
+            finished: boolean;
+            rolled_back: boolean;
+        }>(`
+            SELECT migration_name, checksum,
+                   finished_at IS NOT NULL AS finished,
+                   rolled_back_at IS NOT NULL AS rolled_back
+            FROM public._prisma_migrations
+            ORDER BY migration_name
+        `);
+
+        expect(applied.rows).toEqual(expected.map((migration) => ({
+            migration_name: migration.name,
+            checksum: migration.checksum,
+            finished: true,
+            rolled_back: false,
+        })));
     });
 
     it("limits public Review reads to the approved projection", async () => {
@@ -133,6 +141,25 @@ describe("StudySpace PostgreSQL integration", () => {
                 has_table_privilege('studyspace_saved', 'public."Review"', 'UPDATE') AS can_update
         `);
         expect(privatePrivileges.rows[0]).toEqual({ can_select: true, can_insert: true, can_update: true });
+    });
+
+    it("exposes only the verified account-context functions to the private role", async () => {
+        const privileges = await migrationPool.query(`
+            SELECT
+                has_function_privilege('studyspace_saved', 'public.set_active_account_context(uuid,text)', 'EXECUTE') AS active_context,
+                has_function_privilege('studyspace_saved', 'public.set_moderator_account_context(uuid,text)', 'EXECUTE') AS moderator_context,
+                has_function_privilege('studyspace_saved', 'public.set_active_account_context(uuid,boolean)', 'EXECUTE') AS legacy_context,
+                has_table_privilege('studyspace_saved', 'public."ModeratorGrant"', 'SELECT') AS read_grants,
+                has_table_privilege('studyspace_saved', 'public."ModeratorGrant"', 'INSERT') AS create_grants
+        `);
+
+        expect(privileges.rows[0]).toEqual({
+            active_context: true,
+            moderator_context: true,
+            legacy_context: false,
+            read_grants: false,
+            create_grants: false,
+        });
     });
 
     it("keeps tables created by the migration owner private by default", async () => {

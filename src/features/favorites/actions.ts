@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { getActiveAccountId } from "../../lib/auth/auth";
+import { getAuthIdentity } from "../../lib/auth/auth";
 import { privateDatabase } from "../../lib/db/private-client";
 import { changeFavorite } from "./query";
 
@@ -11,8 +11,8 @@ export async function updateFavorite(_previousMessage: string | null, form: Form
     const origin = (await headers()).get("origin");
     if (!baseUrl || !origin || origin !== new URL(baseUrl).origin) return "This request could not be verified.";
 
-    const accountId = await getActiveAccountId();
-    if (!accountId) return "Sign in again to update Saved.";
+    const identity = await getAuthIdentity();
+    if (!identity) return "Sign in again to update Saved.";
 
     const slug = form.get("slug");
     const intent = form.get("intent");
@@ -22,7 +22,7 @@ export async function updateFavorite(_previousMessage: string | null, form: Form
     }
 
     try {
-        if (!await changeFavorite(privateDatabase(), accountId, slug, intent === "save")) {
+        if (!await changeFavorite(privateDatabase(), identity, slug, intent === "save")) {
             return "This space is no longer available to save.";
         }
     } catch (error) {

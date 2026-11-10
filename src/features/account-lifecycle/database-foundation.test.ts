@@ -20,19 +20,35 @@ describe("account lifecycle database foundation", () => {
         expect(sql).toContain('CREATE UNIQUE INDEX "Review_active_owner_space_key"');
     });
 
-    it("keeps lifecycle tables private and exposes only account resolution/context functions", () => {
+    it("keeps lifecycle tables private and exposes only verified account context functions", () => {
         const sql = readFileSync(migrationPath, "utf8");
+        const authorization = readFileSync("prisma/migrations/20261110170000_harden_account_context_authorization/migration.sql", "utf8");
         const grants = readFileSync("scripts/grant-runtime-roles.sql", "utf8");
         for (const table of ["Account", "AccountIdentity", "AccountClosure", "RetentionHold"]) {
             expect(sql).toContain(`ALTER TABLE \"${table}\" ENABLE ROW LEVEL SECURITY`);
             expect(grants).toContain(`\"${table}\"`);
         }
+        expect(authorization).toContain('ALTER TABLE "ModeratorGrant" ENABLE ROW LEVEL SECURITY');
+        expect(grants).toContain('"ModeratorGrant"');
         expect(sql).toContain('REVOKE ALL ON FUNCTION "resolve_account_identity"(TEXT)');
-        expect(sql).toContain('REVOKE ALL ON FUNCTION "set_active_account_context"(UUID, BOOLEAN)');
         expect(sql).toContain('GRANT EXECUTE ON FUNCTION "resolve_account_identity"(TEXT) TO studyspace_saved');
         expect(sql).toContain('GRANT EXECUTE ON FUNCTION "lookup_active_account_identity"(TEXT) TO studyspace_saved');
-        expect(sql).toContain('GRANT EXECUTE ON FUNCTION "set_active_account_context"(UUID, BOOLEAN) TO studyspace_saved');
+        expect(authorization).toContain('REVOKE ALL ON FUNCTION public.set_active_account_context(UUID, BOOLEAN)');
+        expect(authorization).toContain('GRANT EXECUTE ON FUNCTION public.set_active_account_context(UUID, TEXT) TO studyspace_saved');
+        expect(authorization).toContain('GRANT EXECUTE ON FUNCTION public.set_moderator_account_context(UUID, TEXT) TO studyspace_saved');
+        expect(authorization).toContain('identity."identityKey" = requested_identity_key');
+        expect(authorization).toContain('FROM public."ModeratorGrant" grant_record');
+        expect(grants).not.toContain('GRANT EXECUTE ON FUNCTION public.set_active_account_context(UUID, BOOLEAN)');
         expect(grants).not.toMatch(/GRANT .* ON TABLE "Account"/);
+        expect(grants).not.toMatch(/GRANT .* ON TABLE "ModeratorGrant"/);
+    });
+
+    it("preserves the explicit legacy rollout bridge without treating it as verified identity", () => {
+        const authorization = readFileSync("prisma/migrations/20261110170000_harden_account_context_authorization/migration.sql", "utf8");
+        expect(authorization).toContain("current_setting('studyspace.context_verified', TRUE) IS DISTINCT FROM 'true'");
+        expect(authorization).toContain('"ownerKey" = current_setting(\'studyspace.favorite_owner\', TRUE)');
+        expect(authorization).toContain("current_setting('studyspace.is_moderator', TRUE) = 'true'");
+        expect(authorization).toContain("The contract migration must remove the legacy branch");
     });
 
     it("permits closure unlinking without allowing reassignment or public private-column reads", () => {
