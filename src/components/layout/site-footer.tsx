@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { publicContact } from "../../lib/public-contact";
 
 export function SiteFooter() {
     return (
@@ -9,7 +10,7 @@ export function SiteFooter() {
                     <ul className="flex flex-wrap gap-x-5 gap-y-2">
                         <li><Link href="/privacy" className="hover:text-harbor hover:underline">Privacy</Link></li>
                         <li><Link href="/terms" className="hover:text-harbor hover:underline">Terms</Link></li>
-                        <li><Link href="/privacy#support" className="hover:text-harbor hover:underline">Support status</Link></li>
+                        <li><a href={publicContact.href} className="hover:text-harbor hover:underline">Contact</a></li>
                     </ul>
                 </nav>
             </div>

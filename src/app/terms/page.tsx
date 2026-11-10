@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PolicySection } from "../../components/legal/policy-section";
+import { publicContact } from "../../lib/public-contact";
 
 export const metadata: Metadata = {
     title: "Terms information",
@@ -19,7 +20,7 @@ export default function TermsPage() {
             <aside className="mt-8 grid rounded-2xl border border-dune bg-linen/50 p-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10 lg:p-6" aria-labelledby="terms-review-heading">
                 <h2 id="terms-review-heading" className="font-semibold">Not a finalized agreement</h2>
                 <p className="mt-2 max-w-2xl leading-7 text-muted lg:mt-0">
-                    Owner review is still required for the operator identity, support contact, eligibility, acceptable-use rules, content license, suspension process, warranties, liability, governing law, and dispute terms. This page does not present those unresolved matters as agreed legal terms.
+                    Owner review is still required for the operator identity, eligibility, acceptable-use rules, content license, suspension process, warranties, liability, governing law, and dispute terms. This page does not present those unresolved matters as agreed legal terms.
                 </p>
             </aside>
 
@@ -62,13 +63,13 @@ export default function TermsPage() {
 
                 <PolicySection id="privacy" title="Privacy and account lifecycle">
                     <p className="mt-3">
-                        The <Link href="/privacy" className="font-semibold text-harbor underline">Privacy information</Link> page describes verified data handling and clearly identifies the retention, deletion, support, and provider decisions that remain open. Those decisions must be completed before these terms are finalized.
+                        The <Link href="/privacy" className="font-semibold text-harbor underline">Privacy information</Link> page describes verified data handling and clearly identifies the retention, deletion, and provider decisions that remain open. Those decisions must be completed before these terms are finalized.
                     </p>
                 </PolicySection>
 
-                <PolicySection id="contact" title="Contact status">
+                <PolicySection id="contact" title="Contact">
                     <p className="mt-3">
-                        A public support email and formal notice address have not been selected. No placeholder contact is presented as active. See the <Link href="/privacy#support" className="font-semibold text-harbor underline">support status</Link> for the current launch blocker.
+                        For support, moderation questions, or policy inquiries, email <a href={publicContact.href} className="font-semibold text-harbor underline">{publicContact.email}</a>. A formal notice address has not been selected, and the other draft warnings on this page remain unresolved.
                     </p>
                 </PolicySection>
             </div>

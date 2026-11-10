@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PolicySection } from "../../components/legal/policy-section";
+import { publicContact } from "../../lib/public-contact";
 
 export const metadata: Metadata = {
     title: "Privacy information",
@@ -18,7 +19,7 @@ export default function PrivacyPage() {
             <aside className="mt-8 grid rounded-2xl border border-dune bg-linen/50 p-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10 lg:p-6" aria-labelledby="privacy-review-heading">
                 <h2 id="privacy-review-heading" className="font-semibold">Owner review required before public launch</h2>
                 <p className="mt-2 max-w-2xl leading-7 text-muted lg:mt-0">
-                    This is not a finalized privacy policy. The operator identity and contact, retention periods, account-deletion process, legal jurisdiction, and provider disclosures still require owner review. No support email has been published.
+                    This is not a finalized privacy policy. The operator identity, retention periods, account-deletion process, legal jurisdiction, and provider disclosures still require owner review.
                 </p>
             </aside>
 
@@ -77,13 +78,13 @@ export default function PrivacyPage() {
 
                 <PolicySection id="support" title="Support and privacy requests">
                     <p className="mt-3">
-                        A public support email has not been selected. A verified contact method must be added here and to the authentication-provider configuration before public launch. Until then, this page does not offer a finalized channel for account, privacy, or deletion requests.
+                        For privacy questions, account-data requests, or deletion inquiries, email <a href={publicContact.href} className="font-semibold text-harbor underline">{publicContact.email}</a>. StudySpace does not yet offer an automated account-wide deletion workflow, and the unresolved retention and deletion decisions described above still apply.
                     </p>
                 </PolicySection>
 
                 <PolicySection id="review-items" title="Decisions still requiring owner review">
                     <ul className="mt-3 list-disc space-y-2 pl-6">
-                        <li>Operator identity, contact details, and applicable jurisdiction.</li>
+                        <li>Operator identity, formal notice details, and applicable jurisdiction.</li>
                         <li>Retention periods for account, community, security, provider-log, and backup data.</li>
                         <li>Account deletion, export, correction, and appeal procedures.</li>
                         <li>Production service providers, regions, subprocessors, and Google/Auth0 connection settings.</li>

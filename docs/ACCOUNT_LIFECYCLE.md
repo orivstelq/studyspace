@@ -4,6 +4,8 @@ Status: design only; owner and security review required
 
 No account-wide deletion endpoint, database function, or provider deletion integration exists. This document describes the decisions and controls required before destructive deletion can be implemented. It does not authorize an operator to delete data manually.
 
+Public support and privacy contact: [sidstelq11@gmail.com](mailto:sidstelq11@gmail.com). This address provides an intake channel; it does not by itself verify identity or implement deletion.
+
 ## Current account boundary
 
 Auth0 verifies the session. StudySpace stores the provider subject and session identifiers in `AuthSession`, then derives an issuer-scoped `ownerKey` hash for private application records. The hash is pseudonymous, not anonymous: the same issuer and subject produce the same value again.
@@ -21,7 +23,7 @@ The current user controls are narrower than account deletion:
 
 The owner must approve and publish:
 
-1. A verified support channel and a method for requests when a user cannot sign in.
+1. A secure identity-verification method for requests from someone who cannot sign in.
 2. Whether deletion covers only StudySpace data or also the Auth0 tenant user record. StudySpace cannot delete a Google account.
 3. Retention periods for active data, expired sessions, reports, moderation evidence, provider logs, and backups.
 4. Whether approved review text remains public after account deletion, is anonymized, or is removed.
