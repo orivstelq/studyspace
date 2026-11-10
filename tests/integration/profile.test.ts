@@ -1,9 +1,10 @@
 import "dotenv/config";
-import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it } from "vitest";
+import { randomBytes } from "node:crypto";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../src/generated/prisma/client";
 import { getProfile, saveProfile } from "../../src/features/profile/query";
+import { resolveAccountIdentity } from "../../src/features/account-lifecycle/repository";
 
 function testClient(key: "DIRECT_URL" | "FAVORITES_DATABASE_URL") {
     const url = new URL(process.env[key] ?? "");
@@ -19,12 +20,21 @@ function testClient(key: "DIRECT_URL" | "FAVORITES_DATABASE_URL") {
 describe("Profile persistence and isolation", () => {
     const admin = testClient("DIRECT_URL");
     const profile = testClient("FAVORITES_DATABASE_URL");
-    const owner = randomUUID();
-    const stranger = randomUUID();
+    const ownerKey = randomBytes(32).toString("hex");
+    const strangerKey = randomBytes(32).toString("hex");
+    let owner: string;
+    let stranger: string;
+
+    beforeAll(async () => {
+        owner = (await resolveAccountIdentity(profile, ownerKey))!;
+        stranger = (await resolveAccountIdentity(profile, strangerKey))!;
+    });
 
     afterAll(async () => {
         try {
-            await admin.userProfile.deleteMany({ where: { ownerKey: owner } });
+            await admin.userProfile.deleteMany({ where: { accountId: owner } });
+            await admin.accountIdentity.deleteMany({ where: { accountId: { in: [owner, stranger] } } });
+            await admin.account.deleteMany({ where: { id: { in: [owner, stranger] } } });
         } finally {
             await Promise.all([admin.$disconnect(), profile.$disconnect()]);
         }
@@ -36,7 +46,7 @@ describe("Profile persistence and isolation", () => {
         expect(await getProfile(profile, stranger)).toBeNull();
         expect(await profile.userProfile.findMany()).toEqual([]);
         await expect(profile.userProfile.create({
-            data: { ownerKey: stranger, preferredAmenities: [] },
+            data: { accountId: stranger, preferredAmenities: [] },
         })).rejects.toThrow();
 
         await saveProfile(profile, owner, { category: "all", amenities: ["accessible"] });
@@ -44,8 +54,13 @@ describe("Profile persistence and isolation", () => {
     });
 
     it("rejects unsupported preference values at the database boundary", async () => {
-        await expect(admin.userProfile.create({
-            data: { ownerKey: randomUUID(), preferredAmenities: ["parking"] },
-        })).rejects.toThrow();
+        const account = await admin.account.create({ data: {} });
+        try {
+            await expect(admin.userProfile.create({
+                data: { accountId: account.id, preferredAmenities: ["parking"] },
+            })).rejects.toThrow();
+        } finally {
+            await admin.account.delete({ where: { id: account.id } });
+        }
     });
 });

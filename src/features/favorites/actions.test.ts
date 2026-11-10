@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
-vi.mock("../../lib/auth/auth", () => ({ getFavoriteOwner: mocks.owner }));
+vi.mock("../../lib/auth/auth", () => ({ getActiveAccountId: mocks.owner }));
 vi.mock("../../lib/db/private-client", () => ({ privateDatabase: mocks.database }));
 vi.mock("./query", () => ({ changeFavorite: mocks.change }));
 

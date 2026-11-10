@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
-vi.mock("../../lib/auth/auth", () => ({ getFavoriteOwner: mocks.owner }));
+vi.mock("../../lib/auth/auth", () => ({ getActiveAccountId: mocks.owner }));
 vi.mock("../../lib/db/private-client", () => ({ privateDatabase: mocks.database }));
 vi.mock("./query", () => ({ saveProfile: mocks.save }));
 
@@ -31,7 +31,7 @@ describe("Profile preferences", () => {
         mocks.headers.mockResolvedValue(new Headers({ origin: "https://studyspace.example" }));
         mocks.owner.mockResolvedValue("verified-owner");
         mocks.database.mockReturnValue("private-db");
-        mocks.save.mockResolvedValue({ ownerKey: "verified-owner" });
+        mocks.save.mockResolvedValue({ accountId: "verified-owner" });
     });
 
     afterEach(() => vi.unstubAllEnvs());

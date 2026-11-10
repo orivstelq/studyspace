@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { FavoriteButton } from "@/features/favorites/favorite-button";
 import { hasFavorite } from "@/features/favorites/query";
-import { getAuthClient, getFavoriteOwner } from "@/lib/auth/auth";
+import { getActiveAccountId, getAuthClient } from "@/lib/auth/auth";
 import { privateDatabase } from "@/lib/db/private-client";
 
 import { publicSourceUrl, sourceLabels } from "@/features/discovery/provenance";
@@ -34,7 +34,7 @@ async function FavoriteControl({ id, slug, name }: { id: string; slug: string; n
     let saved: boolean;
 
     try {
-        owner = await getFavoriteOwner();
+        owner = await getActiveAccountId();
         saved = owner ? await hasFavorite(privateDatabase(), owner, id) : false;
     } catch (error) {
         console.error("Saved state unavailable:", error instanceof Error ? error.name : "Unknown error");

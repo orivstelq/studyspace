@@ -35,16 +35,16 @@ export default function PrivacyPage() {
 
                 <PolicySection id="account-data" title="Account and community data">
                     <p className="mt-3">
-                        Private account records use a stable, issuer-scoped hash derived from the verified account identity. StudySpace stores selected space-category and amenity preferences, saved listing identifiers, and their timestamps.
+                        StudySpace derives a stable, issuer-scoped hash from the verified account identity and maps it to a random internal account generation. It stores selected space-category and amenity preferences, saved listing identifiers, and their timestamps against that internal account.
                     </p>
                     <p className="mt-3">
-                        Reviews store a rating, review text, listing, moderation status, and timestamps. Reports store a target, reason, optional details, status, and timestamps. Moderation records store the action, target, time, and a hashed moderator identity.
+                        Reviews store a rating, review text, listing, moderation status, timestamps, and an internal account association while linked. Reports store a target, reason, optional details, status, timestamps, and a reporter association while linked. Moderation records store the action, target, time, and a moderator association while linked.
                     </p>
                 </PolicySection>
 
                 <PolicySection id="visibility" title="What is public">
                     <p className="mt-3">
-                        Published listing information is public. Only moderator-approved review ratings, text, and publication times are returned by public review queries. Account labels, owner hashes, preferences, favorites, pending reviews, reports, and moderation records are not included in public responses.
+                        Published listing information is public. Only moderator-approved review ratings, text, and publication times are returned by public review queries. Account labels, identity hashes, internal account identifiers, preferences, favorites, pending reviews, reports, and moderation records are not included in public responses.
                     </p>
                     <p className="mt-3">
                         New and edited reviews stay private until approved. Editing an approved review removes it from public view while approval is pending. Withdrawing a review removes it from public view but does not delete the stored review row. Reports are visible only to authorized moderators through the application.
@@ -72,7 +72,7 @@ export default function PrivacyPage() {
                         StudySpace does not yet have a published retention schedule or an account-wide deletion workflow. A signed-in user can remove individual favorites, edit preferences, sign out, and withdraw a review. Those controls do not delete every record associated with an account.
                     </p>
                     <p className="mt-3">
-                        The repository contains a design for a future authenticated deletion workflow, but destructive deletion has not been implemented. Backup retention, report handling, review disposition, audit preservation, and deletion from Auth0 all require owner decisions before that workflow can be offered.
+                        The repository contains a local database foundation for a future authenticated deletion workflow, but no account-deletion control or cloud workflow is offered. Reauthentication, provider deletion, scheduled retention enforcement, backup behavior, and recovery still require verification before that workflow can be offered.
                     </p>
                 </PolicySection>
 

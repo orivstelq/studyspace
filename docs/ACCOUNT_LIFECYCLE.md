@@ -1,14 +1,16 @@
 # StudySpace — Account lifecycle and deletion design
 
-Status: Phase 16H engineering policy approved; destructive workflow not implemented
+Status: Phase 17A database foundation implemented locally; no user-facing or cloud deletion workflow
 
 Public support and privacy contact: [sidstelq11@gmail.com](mailto:sidstelq11@gmail.com).
 
-There is still no account-wide deletion endpoint, migration, database function, Auth0 Management API integration, or retention-cleanup schedule. The approved dispositions below are requirements for the future implementation, not a claim that deletion is currently available. `src/features/account-lifecycle/deletion-policy.ts` is a non-mutating planner used to test these rules; it does not read or change a database.
+The Phase 17A foundation migration and its two forward hardening migrations, together with owner-only repository operations, now implement the local database foundation. They have been exercised only against the isolated local test database and have not been applied to Neon. There is still no account-deletion route, button, dedicated lifecycle login, Auth0 Management API integration, provider-completion worker, or retention-cleanup schedule. The approved dispositions below remain engineering requirements, not a public claim that deletion is available.
 
 ## Current identity and data boundary
 
-Auth0 verifies the session. `AuthSession` stores the raw Auth0 subject, one display label, the application and provider session identifiers, and timestamps. Other account-owned rows use `ownerKey`, a SHA-256 digest of the configured Auth0 issuer and subject. That digest is pseudonymous, deterministic, and reproducible after re-registration; it is not anonymous.
+Auth0 verifies the session. The application derives a deterministic SHA-256 identity key from the configured issuer and verified subject, then resolves it through a narrow security-definer function to a random internal `Account` UUID. `AccountIdentity` records each identity generation. Profile, Favorite, Review, report-reporter, moderation-actor, and new sessions use the random account UUID. The identity key remains pseudonymous and reproducible; it is not anonymous.
+
+Existing deterministic ownership values are preserved as generation-one `AccountIdentity` rows during migration without reversing their hashes. Existing `AuthSession` rows cannot be associated in SQL because the issuer is not stored in the database. A passive session read may attach only to an already-active generation; it never creates a generation. Only the verified fresh-login session write may create the next generation after provider completion. New and updated sessions always store `accountId`, and every stored account ID is checked against the subject-derived identity before use.
 
 Current user controls remain narrower than account closure:
 
@@ -23,15 +25,16 @@ Current user controls remain narrower than account closure:
 
 | Record | Current ownership and constraints | Deletion incompatibility |
 | --- | --- | --- |
-| `AuthSession` | Indexed by raw provider subject; the private runtime can delete rows. | The session-store API deletes one session or a verified back-channel subject/session pair, not every session for an account as one closure operation. |
-| `UserProfile` | Non-null `ownerKey` primary key with owner RLS. | Deletion is technically permitted to the private role, but no authenticated account-wide workflow coordinates it. |
-| `Favorite` | Non-null `(ownerKey, studySpaceId)` primary key with owner RLS. | Same coordination problem as Profile. |
-| `Review` | Non-null owner, unique owner/listing pair, owner and moderator RLS, and a trigger that rejects every owner or listing reassignment. | Runtime has no `DELETE`; the trigger also prevents replacing the owner with an unlink marker. A shared tombstone would collide with the unique constraint and permit correlation. |
-| `UserReport` | Non-null reporter, partial unique open-report indexes, moderator-only reads/updates, and restrictive target foreign keys. | Runtime has no `DELETE`; replacing every reporter with one tombstone could collide. A report targeting a review also prevents that review from being deleted. |
-| `ModerationAction` | Non-null moderator; immutable to runtime; restrictive foreign keys to reviews and reports. | The moderator association cannot be removed. Restrictive foreign keys can force reports past their 90-day maximum or non-public reviews past their justified hold. |
+| `AuthSession` | Optional `accountId`, raw provider subject, session identifiers, display label, and expiry. | Closure deletes mapped rows and account state invalidates legacy unmapped rows. Physical cleanup of expired/unmapped rows still needs the approved scheduled job. |
+| `UserProfile` | Required random `accountId` primary key with account RLS. | Owner-only closure finalization deletes it; no runtime deletion privilege or UI exists. |
+| `Favorite` | Required `(accountId, studySpaceId)` primary key with account RLS. | Owner-only closure finalization deletes it; normal writes require an `ACTIVE` locked account. |
+| `Review` | Nullable `ownerAccountId`, partial unique owner/listing index, unlink timestamp, retention assessment fields, RLS, and immutable listing/owner and approval-transition triggers. | Only migration-owner lifecycle context can change a non-null owner to `NULL`; relinking is rejected. Approved retention blocks until a human records `RETAIN`. Reviewer unlink time preserves evidence that an accountable reviewer was recorded. |
+| `UserReport` | Nullable reporter, unlink timestamp, independent immutable target UUID, moderator-only reads/updates, and target foreign keys that may become null. | Closure removes free-form details before unlinking the reporter. It can delete expired resolved reports without losing the moderation target reference. |
+| `ModerationAction` | Nullable moderator, unlink timestamp, independent immutable target UUID, and nullable target foreign keys. | Closure unlinks retained actor associations. Bounded `RetentionHold` rows can justify a finite exception; scheduled expiry enforcement remains unimplemented. |
+| `Account`, `AccountIdentity`, `AccountClosure`, `RetentionHold` | RLS enabled with no runtime table grants. One active identity generation is enforced by a partial unique index. | Destructive operations require the migration owner today. A dedicated lifecycle identity and audited provider worker are rollout gates. |
 | `RateLimitBucket` | Keyed HMAC subject, count, and expiry; bounded maintenance cleanup. | It cannot be enumerated reliably by account without reproducing every scope/window key. Immediate removal would also weaken abuse controls. Let existing short windows expire. |
 
-The application public-review query selects only approved reviews and explicit public fields. At the database layer, RLS limits `studyspace_app` to approved rows, but its current table-level `SELECT` grant covers every Review column, including the pseudonymous owner key. Before account closure ships, replace that grant with a reviewed public view or column-level grants so a compromised public credential cannot retrieve ownership columns. Profile, Favorite, session, report, and audit tables remain unavailable to the public role. Existing RLS correctly prevents ordinary cross-account access, but RLS does not supply the new unlink/delete capabilities.
+The application public-review query selects only approved reviews and explicit public fields. PostgreSQL grants `studyspace_app` only `id`, `studySpaceId`, `rating`, `body`, `status`, and `publishedAt`; actor, lifecycle, assessment, and internal timestamp columns remain denied. Profile, Favorite, session, account-generation, report, hold, and audit tables remain unavailable to the public role.
 
 ## Approved retention and closure rules
 
@@ -50,7 +53,7 @@ The application public-review query selects only approved reviews and explicit p
 
 An exception must name a case reference, approving authority, reason, review date, and finite expiry. It must preserve the minimum evidence, never restore account ownership, and be auditable. An open report may have no fixed review-retention deadline until it is resolved; every other held review and every audit exception must have one.
 
-## Safe code implemented in Phase 16H
+## Implemented local foundation
 
 The pure planner in `src/features/account-lifecycle/deletion-policy.ts`:
 
@@ -63,6 +66,19 @@ The pure planner in `src/features/account-lifecycle/deletion-policy.ts`:
 - accepts no provider subject, owner key, cookie, or database client and performs no mutation.
 
 It is a policy regression aid, not authorization, an execution plan, or proof that a row is safe to publish.
+
+`src/features/account-lifecycle/repository.ts` adds narrowly scoped operations:
+
+- identity resolution creates or returns an `ACTIVE` random account generation under an advisory and row lock;
+- every Profile, Favorite, review, report, moderation, and session transaction locks the acting account and fails unless it is `ACTIVE`;
+- `beginAccountClosure` locks the verified identity's account, marks it `CLOSING`, creates the one-per-generation closure record, and revokes mapped sessions;
+- `finalizeLocalAccountClosure` verifies the same identity belongs to the opaque closure ID, locks all owned review rows, blocks on any unassessed approved review, performs all local dispositions in one transaction, unlinks every mapped identity, and stops at `PROVIDER_PENDING`;
+- moderator approval is rejected for an unlinked or inactive review owner, so a held non-public review cannot later become public;
+- changing review text clears any prior retention assessment in a database trigger, so later reapproval requires a fresh human assessment before closure can retain the text;
+- repeat begin/finalize calls return the same closure state, while another identity cannot finalize the closure;
+- a closed generation cannot resolve again until a separately approved provider workflow marks its closure `COMPLETE`.
+
+These operations accept an injected database client and are not connected to an HTTP action. Lifecycle tables have no runtime grants. Passing the ordinary private runtime client to destructive operations therefore fails closed; local integration tests use the isolated migration-owner test client.
 
 ## Required authenticated workflow
 
@@ -80,26 +96,43 @@ The future self-service operation must use a POST Server Action or route with th
 
 Idempotency must be database-enforced by one closure request per account generation. A repeated request returns the existing state and cannot target another account. Recovery for a person who cannot authenticate is a separate operator-reviewed process and is not authorized by possession of an email address alone.
 
-## Proposed migration and privilege design — approval required
+## Expand/migrate/contract rollout — implemented locally through expand, cloud approval required
 
-No migration has been created or applied. The preferred design replaces deterministic row ownership with a random internal account generation:
+The unpublished Phase 17 migrations are an **expand** release. They retain the deployed `ownerKey`, `reporterKey`, and `moderatorKey` columns, backfill random account IDs, and install compatibility triggers that validate and dual-write both representations. The old application can therefore continue reading and writing while migrations run, and the new application can use account IDs after all migrations and runtime grants succeed. The public role still receives only the six approved Review columns.
+
+Required order:
+
+1. Rehearse the complete migration and grants against a populated PostgreSQL 18 clone; verify the target, recovery point, row counts, ownership, role inheritance, RLS, and current Auth0 issuer-derived keys.
+2. Apply all expand migrations and runtime grants before deploying application code. If any migration fails, leave the old application running, repair forward, and rerun; do not deploy Phase 17 code.
+3. Run catalog verification plus old-application smoke checks for Profile, Favorites, review/report submission, and moderation. Verify active legacy rows have matching account IDs.
+4. Deploy the Phase 17 application with account closure still inaccessible. Verify new sessions, legacy sessions, two-account isolation, moderation, and the passive/fresh identity split.
+5. Keep the compatibility columns and triggers through the observation period. During this period an application rollback to the previous release remains schema-compatible.
+6. Only after no old deployment or rollback depends on legacy columns may a separately reviewed **contract** migration remove them and simplify compatibility policies. That migration is intentionally not present in Phase 17C.
+
+New application code is intentionally not compatible with the pre-expand schema; the deployment gate is migration-first. Old-code/new-expanded-schema compatibility is integration-tested. After a future contract migration, rollback means a forward application fix, not redeploying legacy code.
+
+Forward recovery uses the transactional migration boundary: a failed migration rolls back its own changes, while previously completed expand migrations remain compatible with the old release. Do not use ad hoc down migrations. If data recovery is required, stop traffic, restore into an isolated branch, replay completed closure records before serving, verify integrity, and then promote only under a separate approval.
+
+## Migration and privilege design
+
+The local migration implements the reviewed random account-generation design:
 
 1. Add private `Account`, `AccountIdentity`, and `AccountClosure` records. An account has a random UUID and `ACTIVE`, `CLOSING`, or `CLOSED` state. One account can map multiple verified issuer/subject identities. Store only the minimum identity digest and any provider outbox material needed for retries; encryption/key management and the closure-ledger retention period require separate approval.
 2. Backfill existing owner keys to accounts without reversing the hash. On a verified sign-in, derive the legacy key once, attach that account to the verified identity, and move the session to the random account ID.
-3. Replace Profile/Favorite ownership with a required account ID. Make Review, UserReport reporter, and ModerationAction moderator account IDs nullable and add unlink timestamps. A retained row has `NULL` ownership, not a reusable shared tombstone.
+3. Add required Profile/Favorite account IDs and nullable Review, report-reporter, and moderation-actor account IDs with unlink timestamps. Keep legacy columns only for the expand compatibility window. A retained row has `NULL` ownership in both representations, not a reusable shared tombstone.
 4. Replace the review owner/listing constraint with a uniqueness rule for non-null active account IDs. Keep listing association immutable. Continue to prevent every ordinary owner reassignment; only the reviewed lifecycle function may change an actor reference from one account to `NULL`.
 5. Give `ModerationAction` an immutable target reference independent of its optional review/report foreign key. Change target foreign keys to permit the referenced private evidence to expire without deleting the audit event or keeping a report past 90 days.
 6. Add retention-hold metadata with a bounded reason, case reference, approval, review date, and expiry. No generic indefinite hold is allowed.
 7. Move RLS context from the deterministic owner key to the random account ID and require an `ACTIVE` account for all private writes. Public review policies remain restricted to approved rows and public fields.
-8. Implement one fixed-search-path, security-definer lifecycle function owned by a non-login administrative owner. Grant only `EXECUTE` to a separate NOLOGIN lifecycle permission role and environment-specific login; do not add table privileges or lifecycle execution to `studyspace_app`, `studyspace_saved`, or `studyspace_maintenance`.
-9. Replace the public role's table-wide Review read with a public view or column-level grants for only `id`, `studySpaceId`, `rating`, `body`, `status`, and `publishedAt`, while RLS continues to enforce approved-row visibility. Test denial of actor and internal timestamp columns directly with the runtime login.
+8. Identity resolution and account-context functions use fixed search paths, owner execution, input validation, and exact `EXECUTE` grants to `studyspace_saved`. Destructive closure is not a security-definer function and has no runtime grant or route. A separate NOLOGIN lifecycle permission role and environment-specific login remain required before any deployed worker can call it.
+9. Preserve the public role's column-level Review grants for only `id`, `studySpaceId`, `rating`, `body`, `status`, and `publishedAt`, while RLS continues to enforce approved-row visibility. Test denial of actor, lifecycle, assessment, and internal timestamp columns directly with the runtime login.
 10. Update default privileges and staging catalog verification so the new tables and function are denied to public/runtime roles except for the exact grants reviewed above.
 
-This design resolves re-registration and collision risks better than replacing keys with a constant or random string in the existing columns. It is a destructive schema and authorization change and requires migration review, PostgreSQL integration tests, local data rehearsal, backup approval, and explicit owner approval before creation or application.
+This design resolves re-registration and collision risks better than replacing keys with a shared tombstone. It is a schema and authorization change: the migration was applied only to `studyspace_test`. It still requires a populated-data rehearsal, Neon migration review, backup approval, and explicit owner approval before staging or production application.
 
 ## Re-registration, linked identities, moderators, and holds
 
-- **Re-registration:** after completed closure, a later verified login creates a new random account generation. It must not regain retained reviews, reports, audit actions, Profile, or Favorites from the closed account. It may submit a new review for a listing; that is a new contribution and is still subject to moderation and abuse controls. The current deterministic owner-key model cannot provide this guarantee without the proposed migration.
+- **Re-registration:** identity resolution returns `NULL` while the prior closure is `PROVIDER_PENDING`. Only a separately verified provider-completion process may mark it `COMPLETE`; a later verified login can then create the next generation. Retained rows have `NULL` actor associations and cannot be reclaimed by that generation.
 - **Linked identities:** close every identity already mapped to the same internal account and revoke all of their application sessions. Do not expand deletion by matching email addresses. Auth0-linked identities that the application has never mapped require verified Auth0 Management API behavior; until then, public promises must be limited to the identity/account boundary actually verified.
 - **Moderator accounts:** before local closure, an operator must remove every mapped subject from `AUTH0_MODERATOR_SUBJECTS` and deploy that revocation. Closure then unlinks the moderator actor while preserving the action/target/time for the approved retention window. Re-registration does not restore moderator status.
 - **Holds:** a hold never preserves account ownership. It delays deletion only for the minimum evidence and only until its documented deadline. Resolved reports still have the firm 90-day maximum; audit exceptions beyond 180 days require specific approval and periodic review.
@@ -140,4 +173,4 @@ Before the workflow can be enabled, tests must prove:
 - moderator allowlist revocation and linked-identity handling work with real Auth0 accounts;
 - a full isolated backup restore re-applies completed closures before serving traffic.
 
-Explicit approval is still required for the schema migration, lifecycle database identity and grants, Auth0/session changes, Auth0 Management API access, cleanup functions and schedule, production backup/recovery policy, public policy wording, and any first live deletion. No staging or production deletion should be attempted before all of those gates are satisfied.
+Explicit approval is still required to apply the migration outside `studyspace_test`, create the dedicated lifecycle identity and grants, expose a reauthenticated confirmation flow, add Auth0 Management API access and a retryable provider outbox, implement retention cleanup functions and schedules, verify linked identities and moderator revocation, approve backup/recovery behavior and public policy wording, and perform any first live deletion. No staging or production deletion should be attempted before those gates are satisfied.

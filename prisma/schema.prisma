@@ -59,6 +59,77 @@ enum ModerationActionType {
   REPORT_RESOLVED
 }
 
+enum AccountState {
+  ACTIVE
+  CLOSING
+  CLOSED
+}
+
+enum AccountClosureStatus {
+  AWAITING_REVIEW
+  READY
+  PROVIDER_PENDING
+  COMPLETE
+}
+
+enum ReviewRetentionDecision {
+  RETAIN
+  REDACTION_REQUIRED
+}
+
+model Account {
+  id        String       @id @default(uuid()) @db.Uuid
+  state     AccountState @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  closingAt DateTime?
+  closedAt  DateTime?
+
+  identities               AccountIdentity[]
+  closure                  AccountClosure?
+  sessions                 AuthSession[]
+  profile                  UserProfile?
+  favorites                Favorite[]
+  reviews                  Review[]           @relation("ReviewOwner")
+  retentionReviewedReviews Review[]           @relation("ReviewRetentionReviewer")
+  reports                  UserReport[]       @relation("ReportReporter")
+  moderationActions        ModerationAction[] @relation("ModerationActor")
+
+  @@index([state])
+}
+
+model AccountIdentity {
+  id          String    @id @default(uuid()) @db.Uuid
+  accountId   String    @db.Uuid
+  identityKey String    @db.VarChar(64)
+  generation  Int
+  linkedAt    DateTime  @default(now())
+  unlinkedAt  DateTime?
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([identityKey, generation])
+  @@index([accountId])
+  @@index([identityKey, unlinkedAt])
+}
+
+model AccountClosure {
+  id                      String               @id @default(uuid()) @db.Uuid
+  accountId               String               @unique @db.Uuid
+  status                  AccountClosureStatus
+  requestedAt             DateTime             @default(now())
+  localCompletedAt        DateTime?
+  providerCompletedAt     DateTime?
+  deletedProfileCount     Int                  @default(0)
+  deletedFavoriteCount    Int                  @default(0)
+  revokedSessionCount     Int                  @default(0)
+  deletedReviewCount      Int                  @default(0)
+  retainedReviewCount     Int                  @default(0)
+  unlinkedReportCount     Int                  @default(0)
+  unlinkedModerationCount Int                  @default(0)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+}
+
 model StudySpace {
   id          String        @id @default(uuid()) @db.Uuid
   slug        String        @unique @db.VarChar(160)
@@ -108,14 +179,15 @@ model StudySpaceAmenity {
 }
 
 model Favorite {
-  ownerKey     String   @db.VarChar(64)
+  accountId    String   @db.Uuid
   studySpaceId String   @db.Uuid
   createdAt    DateTime @default(now())
 
+  account    Account    @relation(fields: [accountId], references: [id], onDelete: Restrict)
   studySpace StudySpace @relation(fields: [studySpaceId], references: [id], onDelete: Cascade)
 
-  @@id([ownerKey, studySpaceId])
-  @@index([ownerKey, createdAt, studySpaceId])
+  @@id([accountId, studySpaceId])
+  @@index([accountId, createdAt, studySpaceId])
   @@index([studySpaceId])
 }
 
@@ -126,53 +198,70 @@ model AuthSession {
   providerSessionId String   @db.VarChar(255)
   createdAt         Int
   expiresAt         DateTime
+  accountId         String?  @db.Uuid
 
+  account Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
   @@index([subject])
   @@index([providerSessionId])
   @@index([expiresAt])
 }
 
 model UserProfile {
-  ownerKey           String         @id @db.VarChar(64)
+  accountId          String         @id @db.Uuid
   preferredCategory  SpaceCategory?
   preferredAmenities String[]       @default([]) @db.VarChar(60)
   updatedAt          DateTime       @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
 }
 
 model Review {
-  id           String       @id @default(uuid()) @db.Uuid
-  ownerKey     String       @db.VarChar(64)
-  studySpaceId String       @db.Uuid
-  rating       Int          @db.SmallInt
-  body         String       @db.VarChar(2000)
-  status       ReviewStatus @default(PENDING)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  publishedAt  DateTime?
+  id                          String                   @id @default(uuid()) @db.Uuid
+  ownerAccountId              String?                  @db.Uuid
+  studySpaceId                String                   @db.Uuid
+  rating                      Int                      @db.SmallInt
+  body                        String                   @db.VarChar(2000)
+  status                      ReviewStatus             @default(PENDING)
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
+  publishedAt                 DateTime?
+  ownerUnlinkedAt             DateTime?
+  retentionDecision           ReviewRetentionDecision?
+  retentionReviewedAt         DateTime?
+  retentionReviewerAccountId  String?                  @db.Uuid
+  retentionReviewerUnlinkedAt DateTime?
 
   studySpace        StudySpace         @relation(fields: [studySpaceId], references: [id], onDelete: Restrict)
+  owner             Account?           @relation("ReviewOwner", fields: [ownerAccountId], references: [id], onDelete: Restrict)
+  retentionReviewer Account?           @relation("ReviewRetentionReviewer", fields: [retentionReviewerAccountId], references: [id], onDelete: Restrict)
   reports           UserReport[]
   moderationActions ModerationAction[]
+  retentionHolds    RetentionHold[]
 
-  @@unique([ownerKey, studySpaceId])
+  @@index([ownerAccountId, studySpaceId])
   @@index([studySpaceId, status, publishedAt])
   @@index([status, updatedAt])
 }
 
 model UserReport {
-  id          String           @id @default(uuid()) @db.Uuid
-  reporterKey String           @db.VarChar(64)
-  targetType  ReportTargetType
-  listingId   String?          @db.Uuid
-  reviewId    String?          @db.Uuid
-  reason      ReportReason
-  details     String?          @db.VarChar(1000)
-  status      ReportStatus     @default(OPEN)
-  createdAt   DateTime         @default(now())
-  resolvedAt  DateTime?
+  id                 String           @id @default(uuid()) @db.Uuid
+  reporterAccountId  String?          @db.Uuid
+  targetType         ReportTargetType
+  listingId          String?          @db.Uuid
+  reviewId           String?          @db.Uuid
+  reason             ReportReason
+  details            String?          @db.VarChar(1000)
+  status             ReportStatus     @default(OPEN)
+  createdAt          DateTime         @default(now())
+  resolvedAt         DateTime?
+  reporterUnlinkedAt DateTime?
+  targetReferenceId  String           @db.Uuid
 
+  reporter          Account?           @relation("ReportReporter", fields: [reporterAccountId], references: [id], onDelete: Restrict)
   listing           StudySpace?        @relation(fields: [listingId], references: [id], onDelete: Restrict)
-  review            Review?            @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  review            Review?            @relation(fields: [reviewId], references: [id], onDelete: SetNull)
   moderationActions ModerationAction[]
 
   @@index([status, createdAt])
@@ -181,18 +270,40 @@ model UserReport {
 }
 
 model ModerationAction {
-  id           String               @id @default(uuid()) @db.Uuid
-  moderatorKey String               @db.VarChar(64)
-  action       ModerationActionType
-  reviewId     String?              @db.Uuid
-  reportId     String?              @db.Uuid
-  createdAt    DateTime             @default(now())
+  id                  String               @id @default(uuid()) @db.Uuid
+  moderatorAccountId  String?              @db.Uuid
+  action              ModerationActionType
+  reviewId            String?              @db.Uuid
+  reportId            String?              @db.Uuid
+  createdAt           DateTime             @default(now())
+  moderatorUnlinkedAt DateTime?
+  targetReferenceId   String               @db.Uuid
 
-  review Review?     @relation(fields: [reviewId], references: [id], onDelete: Restrict)
-  report UserReport? @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  moderator      Account?        @relation("ModerationActor", fields: [moderatorAccountId], references: [id], onDelete: Restrict)
+  review         Review?         @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+  report         UserReport?     @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  retentionHolds RetentionHold[]
 
   @@index([reviewId, createdAt])
   @@index([reportId, createdAt])
+}
+
+model RetentionHold {
+  id                 String   @id @default(uuid()) @db.Uuid
+  reviewId           String?  @db.Uuid
+  moderationActionId String?  @db.Uuid
+  caseReference      String   @db.VarChar(120)
+  reason             String   @db.VarChar(500)
+  approvedBy         String   @db.VarChar(120)
+  reviewAt           DateTime
+  expiresAt          DateTime
+  createdAt          DateTime @default(now())
+
+  review           Review?           @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  moderationAction ModerationAction? @relation(fields: [moderationActionId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId, expiresAt])
+  @@index([moderationActionId, expiresAt])
 }
 
 model RateLimitBucket {

@@ -16,10 +16,10 @@ const databaseCategories = {
     coworking: "COWORKING",
 } as const;
 
-export function getProfile(db: Database, ownerKey: string): Promise<ProfilePreferences | null> {
-    return withPrivateContext(db, ownerKey, false, async (tx) => {
+export function getProfile(db: Database, accountId: string): Promise<ProfilePreferences | null> {
+    return withPrivateContext(db, accountId, false, async (tx) => {
         const profile = await tx.userProfile.findUnique({
-            where: { ownerKey },
+            where: { accountId },
             select: { preferredCategory: true, preferredAmenities: true },
         });
         if (!profile) return null;
@@ -31,11 +31,11 @@ export function getProfile(db: Database, ownerKey: string): Promise<ProfilePrefe
     });
 }
 
-export function saveProfile(db: Database, ownerKey: string, preferences: ProfilePreferences) {
-    return withPrivateContext(db, ownerKey, false, (tx) => tx.userProfile.upsert({
-        where: { ownerKey },
+export function saveProfile(db: Database, accountId: string, preferences: ProfilePreferences) {
+    return withPrivateContext(db, accountId, false, (tx) => tx.userProfile.upsert({
+        where: { accountId },
         create: {
-            ownerKey,
+            accountId,
             preferredCategory: preferences.category === "all" ? null : databaseCategories[preferences.category],
             preferredAmenities: preferences.amenities,
         },
@@ -43,6 +43,6 @@ export function saveProfile(db: Database, ownerKey: string, preferences: Profile
             preferredCategory: preferences.category === "all" ? null : databaseCategories[preferences.category],
             preferredAmenities: preferences.amenities,
         },
-        select: { ownerKey: true },
+        select: { accountId: true },
     }));
 }

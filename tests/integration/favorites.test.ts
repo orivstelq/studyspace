@@ -1,9 +1,10 @@
 import "dotenv/config";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../src/generated/prisma/client";
 import { changeFavorite, hasFavorite, listFavorites } from "../../src/features/favorites/query";
+import { resolveAccountIdentity } from "../../src/features/account-lifecycle/repository";
 
 function testClient(key: "DIRECT_URL" | "FAVORITES_DATABASE_URL" | "DATABASE_URL") {
     const url = new URL(process.env[key] ?? "");
@@ -23,11 +24,15 @@ describe("Saved persistence and isolation", () => {
     const prefix = `test-${randomUUID()}`;
     const slug = `${prefix}-published`;
     const draftSlug = `${prefix}-draft`;
-    const owner = randomUUID();
-    const stranger = randomUUID();
+    const ownerKey = randomBytes(32).toString("hex");
+    const strangerKey = randomBytes(32).toString("hex");
+    let owner: string;
+    let stranger: string;
     let spaceId: string;
 
     beforeAll(async () => {
+        owner = (await resolveAccountIdentity(saved, ownerKey))!;
+        stranger = (await resolveAccountIdentity(saved, strangerKey))!;
         const common = { name: "Temporary Saved test", description: "Fixture", category: "LIBRARY", city: "Test", region: "Test", sourceType: "OFFICIAL" } as const;
         const space = await admin.studySpace.create({ data: { ...common, slug, status: "PUBLISHED" } });
         spaceId = space.id;
@@ -37,6 +42,8 @@ describe("Saved persistence and isolation", () => {
     afterAll(async () => {
         try {
             await admin.studySpace.deleteMany({ where: { slug: { in: [slug, draftSlug] } } });
+            await admin.accountIdentity.deleteMany({ where: { accountId: { in: [owner, stranger] } } });
+            await admin.account.deleteMany({ where: { id: { in: [owner, stranger] } } });
         } finally {
             await Promise.all([admin.$disconnect(), saved.$disconnect(), discovery.$disconnect()]);
         }
@@ -51,7 +58,7 @@ describe("Saved persistence and isolation", () => {
         expect((await listFavorites(saved, owner, 1)).spaces.map((space) => space.slug)).toEqual([slug]);
         expect((await listFavorites(saved, stranger, 1)).spaces).toEqual([]);
         expect(await saved.favorite.findMany()).toEqual([]);
-        await expect(saved.favorite.create({ data: { ownerKey: stranger, studySpaceId: spaceId } })).rejects.toThrow();
+        await expect(saved.favorite.create({ data: { accountId: stranger, studySpaceId: spaceId } })).rejects.toThrow();
         await changeFavorite(saved, stranger, slug, false);
         expect(await hasFavorite(saved, owner, spaceId)).toBe(true);
 
@@ -65,6 +72,11 @@ describe("Saved persistence and isolation", () => {
     it("keeps the discovery role out of private tables and the Saved role read-only for listings", async () => {
         await expect(discovery.favorite.findMany()).rejects.toThrow();
         await expect(discovery.authSession.findMany()).rejects.toThrow();
+        await expect(discovery.account.findMany()).rejects.toThrow();
+        await expect(saved.account.findMany()).rejects.toThrow();
+        await expect(saved.accountIdentity.findMany()).rejects.toThrow();
+        await expect(saved.accountClosure.findMany()).rejects.toThrow();
+        await expect(saved.retentionHold.findMany()).rejects.toThrow();
         await expect(saved.studySpace.update({ where: { id: spaceId }, data: { name: "Unauthorized" } })).rejects.toThrow();
     });
 });

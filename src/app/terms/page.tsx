@@ -48,7 +48,7 @@ export default function TermsPage() {
                         New and edited reviews require moderator approval before they are public. Editing an approved review temporarily removes it from public view. Users may withdraw their own review; withdrawal changes its status and does not delete its stored row.
                     </p>
                     <p className="mt-3">
-                        Reports are private to authorized moderators. Moderators can approve or reject pending reviews, hide an approved review, and resolve reports. The application records the moderator action, target, hashed moderator identity, and time.
+                        Reports are private to authorized moderators. Moderators can approve or reject pending reviews, hide an approved review, and resolve reports. The application records the moderator action, target, internal moderator-account association, and time; account-closure handling may later unlink that association while preserving the action record for its approved retention period.
                     </p>
                     <p className="mt-3">
                         Final rules for prohibited content, review ownership, the permission needed to display submitted reviews, enforcement, and appeals require owner review.

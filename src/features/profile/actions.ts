@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { getFavoriteOwner } from "../../lib/auth/auth";
+import { getActiveAccountId } from "../../lib/auth/auth";
 import { privateDatabase } from "../../lib/db/private-client";
 import { parseProfilePreferences } from "./preferences";
 import { saveProfile } from "./query";
@@ -12,14 +12,14 @@ export async function updateProfile(_previousMessage: string | null, form: FormD
     const origin = (await headers()).get("origin");
     if (!baseUrl || !origin || origin !== new URL(baseUrl).origin) return "This request could not be verified.";
 
-    const ownerKey = await getFavoriteOwner();
-    if (!ownerKey) return "Sign in again to update your preferences.";
+    const accountId = await getActiveAccountId();
+    if (!accountId) return "Sign in again to update your preferences.";
 
     const preferences = parseProfilePreferences(form);
     if (!preferences) return "Choose only the available study preferences.";
 
     try {
-        await saveProfile(privateDatabase(), ownerKey, preferences);
+        await saveProfile(privateDatabase(), accountId, preferences);
     } catch (error) {
         console.error("Profile update failed:", error instanceof Error ? error.name : "Unknown error");
         return "Preferences are temporarily unavailable. Try again.";

@@ -71,11 +71,15 @@ describe("staging preparation", () => {
         for (const privilege of ["SELECT", "INSERT", "DELETE"]) {
             expect(script).toContain(`has_table_privilege(session_user, 'public."Favorite"', '${privilege}')`);
         }
-        expect(script).toContain("staging-rls-a-");
-        expect(script).toContain("staging-rls-b-");
+        expect(script).toContain("owner_a := md5('a'");
+        expect(script).toContain("owner_b := md5('b'");
+        expect(script).toContain("|| md5('a2'");
+        expect(script).toContain("|| md5('b2'");
         expect(script).toContain('INSERT INTO public."Favorite"');
-        expect(script).toContain('"ownerKey" = owner_a AND "studySpaceId" = space_id');
-        expect(script).toContain('"ownerKey" = owner_b AND "studySpaceId" = space_id');
+        expect(script).toContain('"accountId" = account_a AND "studySpaceId" = space_id');
+        expect(script).toContain('"accountId" = account_b AND "studySpaceId" = space_id');
+        expect(script).toContain("public.resolve_account_identity(owner_a)");
+        expect(script).toContain("public.set_active_account_context(account_a, false)");
         expect(script).not.toContain("TRUNCATE");
         expect(script).not.toContain("COMMIT;");
         expect(script.trimEnd().endsWith("ROLLBACK;")).toBe(true);
@@ -164,7 +168,7 @@ describe("staging preparation", () => {
         expect(grants).toContain('GRANT SELECT ("id", "studySpaceId", "rating", "body", "status", "publishedAt") ON TABLE "Review" TO studyspace_app');
         expect(verify).toContain("public application role has table-wide Review read privileges");
         expect(verify).toContain("attribute.attname NOT IN ('id', 'studySpaceId', 'rating', 'body', 'status', 'publishedAt')");
-        for (const column of ["ownerKey", "createdAt", "updatedAt"]) {
+        for (const column of ["ownerAccountId", "createdAt", "updatedAt"]) {
             expect(grants).toContain(`"${column}"`);
         }
     });

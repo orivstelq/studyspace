@@ -99,7 +99,7 @@ describe("StudySpace PostgreSQL integration", () => {
             SELECT
                 has_table_privilege(current_user, 'public."Review"', 'SELECT') AS table_select,
                 has_any_column_privilege(current_user, 'public."Review"', 'SELECT') AS any_column_select,
-                has_column_privilege(current_user, 'public."Review"', 'ownerKey', 'SELECT') AS owner_select,
+                has_column_privilege(current_user, 'public."Review"', 'ownerAccountId', 'SELECT') AS owner_select,
                 has_column_privilege(current_user, 'public."Review"', 'createdAt', 'SELECT') AS created_select,
                 has_column_privilege(current_user, 'public."Review"', 'updatedAt', 'SELECT') AS updated_select
         `);
@@ -119,7 +119,7 @@ describe("StudySpace PostgreSQL integration", () => {
         `)).resolves.toBeDefined();
 
         for (const query of [
-            'SELECT "ownerKey" FROM public."Review" LIMIT 0',
+            'SELECT "ownerAccountId" FROM public."Review" LIMIT 0',
             'SELECT "createdAt", "updatedAt" FROM public."Review" LIMIT 0',
             'SELECT * FROM public."Review" LIMIT 0',
         ]) {

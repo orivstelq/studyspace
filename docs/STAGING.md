@@ -1,6 +1,6 @@
 # Staging deployment preparation
 
-Status: the isolated staging application is deployed from commit `70e2bf4`, and Vercel reports it Ready. Database roles, migrations, grants, and the scheduled cleanup are provisioned. Verified evidence and incomplete release gates are recorded in `docs/VERIFICATION.md` and `docs/STAGING_CHECKLIST.md`; staging readiness does not imply commercial production readiness.
+Status: the isolated staging application is deployed from commit `70e2bf4`, and Vercel reports it Ready. The previously recorded database migrations, grants, and scheduled cleanup are provisioned; the three rewritten Phase 17 expand migrations are local-only and pending PostgreSQL 18/Neon rehearsal and explicit cloud review. They retain legacy ownership columns for rollback compatibility; the destructive contract migration is intentionally deferred. Verified evidence and incomplete release gates are recorded in `docs/VERIFICATION.md` and `docs/STAGING_CHECKLIST.md`; staging readiness does not imply commercial production readiness.
 
 ## Fixed environment boundary
 
@@ -19,7 +19,7 @@ The existing permission roles remain group roles and are not recreated:
 | Permission role | Login | Inherit | Purpose |
 | --- | --- | --- | --- |
 | `studyspace_app` | no | no | Published listings and approved public review reads |
-| `studyspace_saved` | no | no | Session, owner-scoped private data, community mutations, and shared rate limits |
+| `studyspace_saved` | no | no | Session, account-scoped private data, community mutations, shared rate limits, and narrow identity/context functions |
 | `studyspace_maintenance` | no | no | Execute the bounded rate-limit cleanup function only |
 
 After explicit approval, create exactly three environment-specific login identities:
@@ -32,7 +32,9 @@ After explicit approval, create exactly three environment-specific login identit
 
 Each login is `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS`. PostgreSQL 18 membership is granted with `INHERIT TRUE`, `SET FALSE`, and `ADMIN FALSE` for exactly one permission role. The global `NOINHERIT` default makes an accidental future membership inert unless its inheritance is reviewed explicitly. `SET FALSE` prevents changing identity to the group role, and `ADMIN FALSE` prevents delegating membership. Permission roles own no SQL objects; runtime logins own no SQL objects and are never members of `neondb_owner` or a Neon administrative role.
 
-This layout matters for RLS. The migration owner bypasses policies as table owner, while the runtime login does not own tables, has no `BYPASSRLS`, and reaches privileges only through its reviewed permission role. The application still must set the verified owner/moderator transaction context; RLS is defense in depth, not authentication.
+This layout matters for RLS. The migration owner bypasses policies as table owner, while the runtime login does not own tables, has no `BYPASSRLS`, and reaches privileges only through its reviewed permission role. The application still must set the verified account/moderator transaction context; RLS is defense in depth, not authentication.
+
+Phase 17C does not add a staging lifecycle login. `studyspace_saved` cannot read lifecycle tables or finalize a closure. The migration-owner-only local finalizer must not be connected to Vercel. A separately reviewed NOLOGIN lifecycle permission role, environment login, exact function grants, reauthentication, and Auth0 worker design are required before any cloud closure workflow.
 
 ## Exact provisioning sequence
 

@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSessionStore, SESSION_DURATION } from "./session-store";
 
 const db = vi.hoisted(() => ({
     authSession: { findUnique: vi.fn(), upsert: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
+    $queryRaw: vi.fn(),
+    $transaction: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -11,6 +13,13 @@ vi.mock("../db/private-client", () => ({ privateDatabase: () => db }));
 afterEach(() => {
     vi.resetAllMocks();
     vi.useRealTimers();
+    vi.unstubAllEnvs();
+});
+
+beforeEach(() => {
+    vi.stubEnv("AUTH0_DOMAIN", "https://identity.example");
+    db.$transaction.mockImplementation((run) => run(db));
+    db.$queryRaw.mockResolvedValue([{ accountId: "11111111-1111-4111-8111-111111111111", active: true }]);
 });
 
 describe("Auth0 server session storage", () => {
@@ -28,6 +37,7 @@ describe("Auth0 server session storage", () => {
         const row = {
             id: "session", subject: "provider|user", displayLabel: "private@example.org", providerSessionId: "provider-session", createdAt,
             expiresAt: new Date((createdAt + SESSION_DURATION) * 1000),
+            accountId: "11111111-1111-4111-8111-111111111111",
         };
         expect(db.authSession.upsert).toHaveBeenCalledWith({
             where: { id: "session" },
@@ -38,6 +48,7 @@ describe("Auth0 server session storage", () => {
                 providerSessionId: row.providerSessionId,
                 createdAt: row.createdAt,
                 expiresAt: row.expiresAt,
+                accountId: row.accountId,
             },
         });
         db.authSession.findUnique.mockResolvedValue(row);
@@ -50,9 +61,51 @@ describe("Auth0 server session storage", () => {
         const row = {
             id: "legacy", subject: "provider|legacy", displayLabel: null, providerSessionId: "provider-session", createdAt: 1_800_000_000,
             expiresAt: new Date(Date.now() + 60_000),
+            accountId: null,
         };
         db.authSession.findUnique.mockResolvedValue(row);
-        expect((await createSessionStore().get("legacy"))?.user).toEqual({ sub: row.subject });
+        expect((await createSessionStore().get("legacy"))?.user).toEqual({
+            sub: row.subject,
+            studyspaceAccountId: "11111111-1111-4111-8111-111111111111",
+        });
+    });
+
+    it("does not create a new account generation for an unmapped stale session", async () => {
+        db.authSession.findUnique.mockResolvedValue({
+            id: "stale", subject: "provider|closed", displayLabel: null, providerSessionId: "provider-session",
+            createdAt: 1_800_000_000, expiresAt: new Date(Date.now() + 60_000), accountId: null,
+        });
+        db.$queryRaw.mockResolvedValueOnce([{ accountId: null }]);
+
+        expect(await createSessionStore().get("stale")).toBeNull();
+        expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+        expect(db.authSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("rejects a session whose subject resolves to a different account", async () => {
+        db.authSession.findUnique.mockResolvedValue({
+            id: "mismatch", subject: "provider|user-a", displayLabel: null, providerSessionId: "provider-session",
+            createdAt: 1_800_000_000, expiresAt: new Date(Date.now() + 60_000),
+            accountId: "11111111-1111-4111-8111-111111111111",
+        });
+        db.$queryRaw.mockResolvedValueOnce([{ accountId: "22222222-2222-4222-8222-222222222222" }]);
+
+        expect(await createSessionStore().get("mismatch")).toBeNull();
+        expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects a stored session as soon as its account is no longer active", async () => {
+        db.authSession.findUnique.mockResolvedValue({
+            id: "closing",
+            subject: "provider|closing",
+            displayLabel: null,
+            providerSessionId: "provider-session",
+            createdAt: 1_800_000_000,
+            expiresAt: new Date(Date.now() + 60_000),
+            accountId: "11111111-1111-4111-8111-111111111111",
+        });
+        db.$queryRaw.mockResolvedValue([{ active: false }]);
+        expect(await createSessionStore().get("closing")).toBeNull();
     });
 
     it("updates an existing session atomically without recreating a revoked session", async () => {
@@ -62,10 +115,14 @@ describe("Auth0 server session storage", () => {
             tokenSet: { accessToken: "ignored", expiresAt: 0 },
             internal: { createdAt: 1_800_000_000, sid: "provider-session" },
         };
+        db.authSession.findUnique
+            .mockResolvedValueOnce({ subject: "provider|user", accountId: "11111111-1111-4111-8111-111111111111" })
+            .mockResolvedValueOnce(null);
         db.authSession.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
 
         expect(await store.update?.("existing", session)).toBe(true);
         expect(await store.update?.("revoked", session)).toBe(false);
+        expect(db.authSession.updateMany).toHaveBeenCalledTimes(1);
         expect(db.authSession.upsert).not.toHaveBeenCalled();
     });
 

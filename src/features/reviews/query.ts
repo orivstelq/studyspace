@@ -6,6 +6,7 @@ type PublicDatabase = Pick<PrismaClient, "review">;
 type PrivateDatabase = Pick<PrismaClient, "$transaction">;
 
 export interface PrivateIdentity {
+    accountId: string;
     ownerKey: string;
     isModerator: boolean;
 }
@@ -19,40 +20,60 @@ export function listApprovedReviews(db: PublicDatabase, studySpaceId: string) {
     });
 }
 
-export function getOwnReview(db: PrivateDatabase, ownerKey: string, studySpaceId: string) {
-    return withPrivateContext(db, ownerKey, false, (tx) => tx.review.findUnique({
-        where: { ownerKey_studySpaceId: { ownerKey, studySpaceId } },
+export function getOwnReview(db: PrivateDatabase, accountId: string, studySpaceId: string) {
+    return withPrivateContext(db, accountId, false, (tx) => tx.review.findFirst({
+        where: { ownerAccountId: accountId, studySpaceId },
         select: { id: true, rating: true, body: true, status: true, updatedAt: true },
     }));
 }
 
 export function saveOwnReview(
     db: PrivateDatabase,
-    ownerKey: string,
+    accountId: string,
     slug: string,
     rating: number,
     body: string,
 ) {
-    return withPrivateContext(db, ownerKey, false, async (tx) => {
+    return withPrivateContext(db, accountId, false, async (tx) => {
         const space = await tx.studySpace.findFirst({
             where: { ...publishedSpaceWhere, slug },
             select: { id: true },
         });
         if (!space) return null;
 
-        return tx.review.upsert({
-            where: { ownerKey_studySpaceId: { ownerKey, studySpaceId: space.id } },
-            create: { ownerKey, studySpaceId: space.id, rating, body, status: "PENDING" },
-            update: { rating, body, status: "PENDING", publishedAt: null },
+        const existing = await tx.review.findFirst({
+            where: { ownerAccountId: accountId, studySpaceId: space.id },
             select: { id: true },
         });
+        if (existing) {
+            return tx.review.update({
+                where: { id: existing.id },
+                data: { rating, body, status: "PENDING", publishedAt: null },
+                select: { id: true },
+            });
+        }
+        const inserted = await tx.review.createMany({
+            data: { ownerAccountId: accountId, studySpaceId: space.id, rating, body, status: "PENDING" },
+            skipDuplicates: true,
+        });
+        const review = await tx.review.findFirstOrThrow({
+            where: { ownerAccountId: accountId, studySpaceId: space.id },
+            select: { id: true },
+        });
+        if (!inserted.count) {
+            await tx.review.update({
+                where: { id: review.id },
+                data: { rating, body, status: "PENDING", publishedAt: null },
+            });
+        }
+        return review;
     });
 }
 
-export function withdrawOwnReview(db: PrivateDatabase, ownerKey: string, slug: string) {
-    return withPrivateContext(db, ownerKey, false, async (tx) => {
+export function withdrawOwnReview(db: PrivateDatabase, accountId: string, slug: string) {
+    return withPrivateContext(db, accountId, false, async (tx) => {
         const result = await tx.review.updateMany({
-            where: { ownerKey, studySpace: { slug }, status: { not: "WITHDRAWN" } },
+            where: { ownerAccountId: accountId, studySpace: { slug }, status: { not: "WITHDRAWN" } },
             data: { status: "WITHDRAWN", publishedAt: null },
         });
         return result.count > 0;
@@ -61,12 +82,12 @@ export function withdrawOwnReview(db: PrivateDatabase, ownerKey: string, slug: s
 
 export function submitContentReport(
     db: PrivateDatabase,
-    ownerKey: string,
+    accountId: string,
     target: { type: "LISTING"; slug: string } | { type: "REVIEW"; reviewId: string },
     reason: "INACCURATE" | "CLOSED" | "INAPPROPRIATE" | "OTHER",
     details: string | null,
 ) {
-    return withPrivateContext(db, ownerKey, false, async (tx) => {
+    return withPrivateContext(db, accountId, false, async (tx) => {
         if (target.type === "LISTING") {
             const listing = await tx.studySpace.findFirst({
                 where: { ...publishedSpaceWhere, slug: target.slug },
@@ -74,7 +95,7 @@ export function submitContentReport(
             });
             if (!listing) return false;
             await tx.userReport.createMany({
-                data: [{ reporterKey: ownerKey, targetType: "LISTING", listingId: listing.id, reason, details }],
+                data: [{ reporterAccountId: accountId, targetType: "LISTING", listingId: listing.id, targetReferenceId: listing.id, reason, details }],
             });
             return true;
         }
@@ -85,18 +106,18 @@ export function submitContentReport(
         });
         if (!review) return false;
         await tx.userReport.createMany({
-            data: [{ reporterKey: ownerKey, targetType: "REVIEW", reviewId: review.id, reason, details }],
+            data: [{ reporterAccountId: accountId, targetType: "REVIEW", reviewId: review.id, targetReferenceId: review.id, reason, details }],
         });
         return true;
     });
 }
 
 export function listModerationQueue(db: PrivateDatabase, identity: PrivateIdentity) {
-    return withPrivateContext(db, identity.ownerKey, identity.isModerator, async (tx) => {
+    return withPrivateContext(db, identity.accountId, identity.isModerator, async (tx) => {
         if (!identity.isModerator) return null;
         const [reviews, publishedReviews, reports] = await Promise.all([
             tx.review.findMany({
-                where: { status: "PENDING" },
+                where: { status: "PENDING", ownerAccountId: { not: null } },
                 select: {
                     id: true, rating: true, body: true, updatedAt: true,
                     studySpace: { select: { name: true, slug: true } },
@@ -134,7 +155,7 @@ export function moderateReview(
     reviewId: string,
     decision: "approve" | "reject" | "hide",
 ) {
-    return withPrivateContext(db, identity.ownerKey, identity.isModerator, async (tx) => {
+    return withPrivateContext(db, identity.accountId, identity.isModerator, async (tx) => {
         if (!identity.isModerator) return false;
         const transition = decision === "approve"
             ? { from: "PENDING" as const, to: "APPROVED" as const, action: "REVIEW_APPROVED" as const, publishedAt: new Date() }
@@ -142,12 +163,16 @@ export function moderateReview(
                 ? { from: "PENDING" as const, to: "REJECTED" as const, action: "REVIEW_REJECTED" as const, publishedAt: null }
                 : { from: "APPROVED" as const, to: "HIDDEN" as const, action: "REVIEW_HIDDEN" as const, publishedAt: null };
         const updated = await tx.review.updateMany({
-            where: { id: reviewId, status: transition.from },
+            where: {
+                id: reviewId,
+                status: transition.from,
+                ...(decision === "approve" ? { ownerAccountId: { not: null } } : {}),
+            },
             data: { status: transition.to, publishedAt: transition.publishedAt },
         });
         if (!updated.count) return false;
         await tx.moderationAction.create({
-            data: { moderatorKey: identity.ownerKey, action: transition.action, reviewId },
+            data: { moderatorAccountId: identity.accountId, action: transition.action, reviewId, targetReferenceId: reviewId },
             select: { id: true },
         });
         return true;
@@ -155,7 +180,7 @@ export function moderateReview(
 }
 
 export function resolveReport(db: PrivateDatabase, identity: PrivateIdentity, reportId: string) {
-    return withPrivateContext(db, identity.ownerKey, identity.isModerator, async (tx) => {
+    return withPrivateContext(db, identity.accountId, identity.isModerator, async (tx) => {
         if (!identity.isModerator) return false;
         const updated = await tx.userReport.updateMany({
             where: { id: reportId, status: "OPEN" },
@@ -163,7 +188,7 @@ export function resolveReport(db: PrivateDatabase, identity: PrivateIdentity, re
         });
         if (!updated.count) return false;
         await tx.moderationAction.create({
-            data: { moderatorKey: identity.ownerKey, action: "REPORT_RESOLVED", reportId },
+            data: { moderatorAccountId: identity.accountId, action: "REPORT_RESOLVED", reportId, targetReferenceId: reportId },
             select: { id: true },
         });
         return true;

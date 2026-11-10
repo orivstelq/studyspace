@@ -5,7 +5,7 @@ import { connection } from "next/server";
 import { FavoriteButton } from "@/features/favorites/favorite-button";
 import { listFavorites } from "@/features/favorites/query";
 import { parseDirectoryParams } from "@/features/discovery/directory-params";
-import { getAuthClient, getFavoriteOwner } from "@/lib/auth/auth";
+import { getActiveAccountId, getAuthClient } from "@/lib/auth/auth";
 import { privateDatabase } from "@/lib/db/private-client";
 
 export const metadata: Metadata = {
@@ -17,7 +17,7 @@ type SavedProps = Pick<PageProps<"/saved">, "searchParams">;
 
 async function SavedCollection({ searchParams }: SavedProps) {
     await connection();
-    const owner = await getFavoriteOwner();
+    const owner = await getActiveAccountId();
     if (!owner) {
         return (
             <section className="mt-8 rounded-2xl border border-clay bg-white p-6 sm:p-10">

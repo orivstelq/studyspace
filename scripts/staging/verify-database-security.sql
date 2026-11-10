@@ -100,9 +100,9 @@ BEGIN
     FROM pg_catalog.pg_class relation
     JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
     WHERE namespace.nspname = 'public'
-      AND relation.relname IN ('Favorite', 'UserProfile', 'Review', 'UserReport', 'ModerationAction');
+      AND relation.relname IN ('Account', 'AccountIdentity', 'AccountClosure', 'RetentionHold', 'Favorite', 'UserProfile', 'Review', 'UserReport', 'ModerationAction');
 
-    IF bad_count <> 5 THEN
+    IF bad_count <> 9 THEN
         RAISE EXCEPTION 'one or more private RLS tables are missing';
     END IF;
 
@@ -110,7 +110,7 @@ BEGIN
     FROM pg_catalog.pg_class relation
     JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
     WHERE namespace.nspname = 'public'
-      AND relation.relname IN ('Favorite', 'UserProfile', 'Review', 'UserReport', 'ModerationAction')
+      AND relation.relname IN ('Account', 'AccountIdentity', 'AccountClosure', 'RetentionHold', 'Favorite', 'UserProfile', 'Review', 'UserReport', 'ModerationAction')
       AND (NOT relation.relrowsecurity OR relation.relforcerowsecurity);
 
     IF bad_count <> 0 THEN
@@ -131,10 +131,30 @@ BEGIN
     END IF;
 
     IF has_table_privilege('studyspace_app', 'public."Favorite"', 'SELECT')
+       OR has_table_privilege('studyspace_app', 'public."Account"', 'SELECT')
+       OR has_table_privilege('studyspace_app', 'public."AccountIdentity"', 'SELECT')
+       OR has_table_privilege('studyspace_app', 'public."AccountClosure"', 'SELECT')
+       OR has_table_privilege('studyspace_app', 'public."RetentionHold"', 'SELECT')
        OR has_table_privilege('studyspace_app', 'public."UserProfile"', 'SELECT')
        OR has_table_privilege('studyspace_app', 'public."UserReport"', 'SELECT')
        OR has_table_privilege('studyspace_app', 'public."ModerationAction"', 'SELECT') THEN
         RAISE EXCEPTION 'public application role can read private account or moderation tables';
+    END IF;
+
+    IF has_table_privilege('studyspace_saved', 'public."Account"', 'SELECT')
+       OR has_table_privilege('studyspace_saved', 'public."AccountIdentity"', 'SELECT')
+       OR has_table_privilege('studyspace_saved', 'public."AccountClosure"', 'SELECT')
+       OR has_table_privilege('studyspace_saved', 'public."RetentionHold"', 'SELECT')
+       OR NOT has_function_privilege('studyspace_saved', 'public.resolve_account_identity(text)', 'EXECUTE')
+       OR NOT has_function_privilege('studyspace_saved', 'public.lookup_active_account_identity(text)', 'EXECUTE')
+       OR NOT has_function_privilege('studyspace_saved', 'public.set_active_account_context(uuid,boolean)', 'EXECUTE')
+       OR has_function_privilege('studyspace_app', 'public.resolve_account_identity(text)', 'EXECUTE')
+       OR has_function_privilege('studyspace_app', 'public.lookup_active_account_identity(text)', 'EXECUTE')
+       OR has_function_privilege('studyspace_app', 'public.set_active_account_context(uuid,boolean)', 'EXECUTE')
+       OR has_function_privilege('studyspace_maintenance', 'public.resolve_account_identity(text)', 'EXECUTE')
+       OR has_function_privilege('studyspace_maintenance', 'public.lookup_active_account_identity(text)', 'EXECUTE')
+       OR has_function_privilege('studyspace_maintenance', 'public.set_active_account_context(uuid,boolean)', 'EXECUTE') THEN
+        RAISE EXCEPTION 'account lifecycle table or function grants are incorrect';
     END IF;
 
     IF NOT has_table_privilege('studyspace_app', 'public."StudySpace"', 'SELECT') THEN
@@ -183,6 +203,30 @@ BEGIN
           AND NOT trigger.tgisinternal
     ) THEN
         RAISE EXCEPTION 'review identity immutability trigger is missing';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_trigger trigger
+        JOIN pg_catalog.pg_class relation ON relation.oid = trigger.tgrelid
+        JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+        WHERE namespace.nspname = 'public'
+          AND relation.relname = 'UserReport'
+          AND trigger.tgname = 'UserReport_identity_immutable'
+          AND NOT trigger.tgisinternal
+    ) THEN
+        RAISE EXCEPTION 'report identity immutability trigger is missing';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_proc function
+        JOIN pg_catalog.pg_namespace namespace ON namespace.oid = function.pronamespace
+        WHERE namespace.nspname = 'public'
+          AND function.proname IN ('resolve_account_identity', 'lookup_active_account_identity', 'set_active_account_context')
+          AND (NOT function.prosecdef OR array_to_string(function.proconfig, ',') NOT LIKE '%search_path=pg_catalog, public%')
+    ) THEN
+        RAISE EXCEPTION 'account lifecycle runtime functions are not fixed-search-path security definers';
     END IF;
 END
 $verify$;
