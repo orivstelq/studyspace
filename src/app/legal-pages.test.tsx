@@ -23,6 +23,9 @@ describe("public legal information", () => {
         expect(html).toContain("Owner review required before public launch");
         expect(html).toContain("does not yet have a published retention schedule or an account-wide deletion workflow");
         expect(html).toContain('id="support"');
+        expect(html).toContain('<main id="main-content" class="mx-auto w-full max-w-5xl');
+        expect(html).toContain("lg:grid-cols-[13rem_minmax(0,1fr)]");
+        expect(html).toContain('<div class="max-w-2xl">');
         expect(html).not.toContain("mailto:");
     });
 
@@ -33,6 +36,9 @@ describe("public legal information", () => {
         expect(html).toContain("Terms of use</h1>");
         expect(html).toContain("Not a finalized agreement");
         expect(html).toContain("No placeholder contact is presented as active");
+        expect(html).toContain('<main id="main-content" class="mx-auto w-full max-w-5xl');
+        expect(html).toContain("lg:grid-cols-[13rem_minmax(0,1fr)]");
+        expect(html).toContain('<div class="max-w-2xl">');
         expect(html).not.toContain("mailto:");
     });
 
