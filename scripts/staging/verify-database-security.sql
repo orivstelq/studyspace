@@ -137,9 +137,33 @@ BEGIN
         RAISE EXCEPTION 'public application role can read private account or moderation tables';
     END IF;
 
-    IF NOT has_table_privilege('studyspace_app', 'public."StudySpace"', 'SELECT')
-       OR NOT has_table_privilege('studyspace_app', 'public."Review"', 'SELECT') THEN
-        RAISE EXCEPTION 'public application role is missing required public read privileges';
+    IF NOT has_table_privilege('studyspace_app', 'public."StudySpace"', 'SELECT') THEN
+        RAISE EXCEPTION 'public application role is missing required listing read privileges';
+    END IF;
+
+    IF has_table_privilege('studyspace_app', 'public."Review"', 'SELECT') THEN
+        RAISE EXCEPTION 'public application role has table-wide Review read privileges';
+    END IF;
+
+    IF NOT has_column_privilege('studyspace_app', 'public."Review"', 'id', 'SELECT')
+       OR NOT has_column_privilege('studyspace_app', 'public."Review"', 'studySpaceId', 'SELECT')
+       OR NOT has_column_privilege('studyspace_app', 'public."Review"', 'rating', 'SELECT')
+       OR NOT has_column_privilege('studyspace_app', 'public."Review"', 'body', 'SELECT')
+       OR NOT has_column_privilege('studyspace_app', 'public."Review"', 'status', 'SELECT')
+       OR NOT has_column_privilege('studyspace_app', 'public."Review"', 'publishedAt', 'SELECT') THEN
+        RAISE EXCEPTION 'public application role is missing required public Review columns';
+    END IF;
+
+    SELECT count(*) INTO bad_count
+    FROM pg_catalog.pg_attribute attribute
+    WHERE attribute.attrelid = 'public."Review"'::regclass
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND has_column_privilege('studyspace_app', 'public."Review"', attribute.attname, 'SELECT')
+      AND attribute.attname NOT IN ('id', 'studySpaceId', 'rating', 'body', 'status', 'publishedAt');
+
+    IF bad_count <> 0 THEN
+        RAISE EXCEPTION 'public application role can read non-public Review columns';
     END IF;
 
     IF has_function_privilege('studyspace_app', 'public.cleanup_expired_rate_limit_buckets(integer)', 'EXECUTE')

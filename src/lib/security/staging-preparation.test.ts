@@ -155,4 +155,17 @@ describe("staging preparation", () => {
         expect(cleanup.match(/^SELECT /gm)).toHaveLength(1);
         expect(cleanup).toContain("cleanup_expired_rate_limit_buckets(1000)");
     });
+
+    it("keeps public Review access column-scoped", () => {
+        const grants = readFileSync("scripts/grant-runtime-roles.sql", "utf8");
+        const verify = readFileSync("scripts/staging/verify-database-security.sql", "utf8");
+
+        expect(grants).not.toContain('GRANT SELECT ON TABLE "Review" TO studyspace_app');
+        expect(grants).toContain('GRANT SELECT ("id", "studySpaceId", "rating", "body", "status", "publishedAt") ON TABLE "Review" TO studyspace_app');
+        expect(verify).toContain("public application role has table-wide Review read privileges");
+        expect(verify).toContain("attribute.attname NOT IN ('id', 'studySpaceId', 'rating', 'body', 'status', 'publishedAt')");
+        for (const column of ["ownerKey", "createdAt", "updatedAt"]) {
+            expect(grants).toContain(`"${column}"`);
+        }
+    });
 });

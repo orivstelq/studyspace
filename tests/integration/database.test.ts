@@ -94,6 +94,47 @@ describe("StudySpace PostgreSQL integration", () => {
         });
     });
 
+    it("limits public Review reads to the approved projection", async () => {
+        const privileges = await applicationPool.query(`
+            SELECT
+                has_table_privilege(current_user, 'public."Review"', 'SELECT') AS table_select,
+                has_any_column_privilege(current_user, 'public."Review"', 'SELECT') AS any_column_select,
+                has_column_privilege(current_user, 'public."Review"', 'ownerKey', 'SELECT') AS owner_select,
+                has_column_privilege(current_user, 'public."Review"', 'createdAt', 'SELECT') AS created_select,
+                has_column_privilege(current_user, 'public."Review"', 'updatedAt', 'SELECT') AS updated_select
+        `);
+
+        expect(privileges.rows[0]).toEqual({
+            table_select: false,
+            any_column_select: true,
+            owner_select: false,
+            created_select: false,
+            updated_select: false,
+        });
+
+        await expect(applicationPool.query(`
+            SELECT "id", "studySpaceId", "rating", "body", "status", "publishedAt"
+            FROM public."Review"
+            LIMIT 0
+        `)).resolves.toBeDefined();
+
+        for (const query of [
+            'SELECT "ownerKey" FROM public."Review" LIMIT 0',
+            'SELECT "createdAt", "updatedAt" FROM public."Review" LIMIT 0',
+            'SELECT * FROM public."Review" LIMIT 0',
+        ]) {
+            await expect(applicationPool.query(query)).rejects.toMatchObject({ code: "42501" });
+        }
+
+        const privatePrivileges = await migrationPool.query(`
+            SELECT
+                has_table_privilege('studyspace_saved', 'public."Review"', 'SELECT') AS can_select,
+                has_table_privilege('studyspace_saved', 'public."Review"', 'INSERT') AS can_insert,
+                has_table_privilege('studyspace_saved', 'public."Review"', 'UPDATE') AS can_update
+        `);
+        expect(privatePrivileges.rows[0]).toEqual({ can_select: true, can_insert: true, can_update: true });
+    });
+
     it("keeps tables created by the migration owner private by default", async () => {
         const tableName = `DefaultPrivilegeProbe_${randomUUID().replaceAll("-", "")}`;
         const identifier = `"${tableName}"`;
