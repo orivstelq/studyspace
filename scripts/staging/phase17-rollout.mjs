@@ -18,6 +18,7 @@ const phase17Migrations = [
     "20261110013000_harden_lifecycle_actor_fields",
     "20261110014500_invalidate_review_retention_assessment",
     "20261110170000_harden_account_context_authorization",
+    "20261110190000_add_lifecycle_retention_cleanup",
 ];
 
 function required(environment, name) {
@@ -96,8 +97,8 @@ export function readLocalMigrations(root = projectRoot) {
 
 export function verifyMigrationHistory(localMigrations, appliedMigrations, stage = "before") {
     const localNames = localMigrations.map(({ name }) => name);
-    if (localMigrations.length !== 14 || !phase17Migrations.every((name) => localNames.includes(name))) {
-        throw new Error("local migration set is not the reviewed 14-migration chain");
+    if (localMigrations.length !== 15 || !phase17Migrations.every((name) => localNames.includes(name))) {
+        throw new Error("local migration set is not the reviewed 15-migration chain");
     }
     const baselineCount = localMigrations.length - phase17Migrations.length;
     const expectedAppliedCount = stage === "before"
@@ -336,7 +337,7 @@ async function main() {
         environment: environments.psql, label: "database security verification", secrets,
     });
     verifyMigrationHistory(localMigrations, await databaseState(configuration), "after");
-    console.log("PASS all 14 migrations, runtime grants, ownership, RLS, and security checks");
+    console.log(`PASS all ${localMigrations.length} migrations, runtime grants, ownership, RLS, and security checks`);
     console.log("PASS database rollout complete; application deployment remains a separate approved action");
 }
 

@@ -17,7 +17,7 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 
 | Evidence | Recorded result | Scope limitation |
 | --- | --- | --- |
-| Disposable Neon migration rehearsal | All 14 migrations and runtime grants were applied to `rehearsal-account-lifecycle` (`br-cold-king-beer2yusy`) in `studyspace_staging`. | The parent staging branch was not changed; this is not deployment approval. |
+| Disposable Neon migration rehearsal | The first 14 migrations and runtime grants were applied to `rehearsal-account-lifecycle` (`br-cold-king-beer2yusy`) in `studyspace_staging`. | The new additive lifecycle-cleanup migration still needs rehearsal; the parent staging branch was not changed. |
 | Runtime boundary | Public/Saved permissions, two synthetic-account isolation, legacy ownership mappings, 12 verified-context policies, seven legacy-compatibility policies, no-grant moderator denial, and denial of the retired UUID/boolean context function passed. | Catalog and grant checks are not executed old-application behavior. Positive/revoked moderator grants were verified only in local integration tests. |
 | Compatibility | Local PostgreSQL integration tests executed legacy Profile, Favorite, Review, report, and moderation reads and writes against the expanded schema. | The baseline application binary and live Vercel/Auth0 flows were not run against the disposable branch. |
 
@@ -27,7 +27,7 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 | --- | --- | --- |
 | Reachable-history scan | All 52 reachable commits and 872 reachable objects were checked for private-key markers, common provider-token formats, JWT-shaped values, credential-bearing PostgreSQL URLs, environment files, logs, screenshots, and Playwright state. Matches were limited to documented placeholders, CI-only local credentials, environment-variable references, the approved public contact, and documented infrastructure metadata. | Pattern scanning cannot prove that an arbitrary unstructured secret is absent. GitHub author metadata includes the owner's full name, which requires owner acceptance before visibility changes. |
 | Public staging headers | Read-only HTTPS HEAD requests to `/`, `/privacy`, and `/terms` returned 200 with one-year HSTS, the documented CSP, `nosniff`, referrer policy, permissions policy, and no `X-Powered-By`. | This did not query database-backed routes, test CSP violations in a browser, verify HTTP-to-HTTPS redirect, or test forwarded-header trust. |
-| Local release gates | 127 unit tests, 33 PostgreSQL integration tests against `studyspace_test_recovery`, ESLint, TypeScript, Prisma validation, webpack production build, four public Playwright tests, and `npm audit` passed. | The connected-browser list was empty; authenticated and moderator Playwright tests were not executed. GitHub CI must rerun for the final commit. |
+| Local release gates | 128 unit tests, 34 PostgreSQL integration tests against `studyspace_test_recovery`, ESLint, TypeScript, Prisma validation, webpack production build, four public Playwright tests, and `npm audit` passed. | The local Turbopack worker could not bind its helper port; authenticated/moderator Playwright and the new lifecycle cleanup remain live-cloud gates. GitHub CI must rerun for the final commit. |
 
 ## Source and build
 
@@ -56,7 +56,8 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 | NOT RUN | Review integrity | Rating/body edit succeeds; owner/listing reassignment fails; approved edit becomes pending/private |
 | NOT RUN | Moderator boundary | Browser/non-moderator cannot set moderator authority; valid moderator transitions create audit rows |
 | NOT RUN | Reports | Submitter/public cannot read reports; moderator can resolve with an audit row |
-| PASS | Cleanup | 2026-11-08: restricted cleanup run `42527692806` succeeded with `0` deletions and a 1,000-row limit |
+| PASS | Rate-limit cleanup | 2026-11-08: restricted cleanup run `42527692806` succeeded with `0` deletions and a 1,000-row limit |
+| NOT RUN | Lifecycle cleanup | Additive cleanup migration rehearsed on disposable Neon; restricted run records session/report/audit counts and preserves active audit holds |
 | NOT RUN | Pool capacity | Pooled URLs verified; connection/queue metrics captured under representative concurrency |
 
 ## Vercel and network
@@ -97,7 +98,8 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 | Status | Gate | Required evidence |
 | --- | --- | --- |
 | NOT RUN | Monitoring | Owners and tested alerts for errors, latency, auth, DB saturation/storage, 429/503, cleanup backlog |
-| PASS | Cleanup schedule | 2026-11-08: hourly restricted workflow run `42527692806` succeeded; last count `0` of `1,000` |
+| PASS | Rate-limit cleanup schedule | 2026-11-08: hourly restricted workflow run `42527692806` succeeded; last count `0` of `1,000` |
+| NOT RUN | Lifecycle cleanup schedule | New migration and combined workflow applied; first restricted run and alert evidence recorded |
 | NOT RUN | Incident access | Named operator can revoke/rotate each login and Auth0/Vercel secret without code change |
 | NOT RUN | Deployment approval | Explicit owner approval references the tested commit and unresolved accepted risks |
 
@@ -107,8 +109,8 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 | --- | --- | --- |
 | NOT RUN | Parent identity | Neon dashboard evidence for project `curly-paper-15884428`, branch name `production`, its non-rehearsal branch ID, exact direct hostname, database `studyspace_staging`, and PostgreSQL 18 |
 | NOT RUN | Fresh recovery point | Provider evidence captured within 30 minutes of migration, plus the operator timestamp supplied to the rollout guard |
-| NOT RUN | Read-only rollout check | `phase17-rollout.mjs check` produces only PASS results for the approved clean commit, owner connection, roles, and exact ten-applied/four-pending history |
-| NOT RUN | Migration-first rollout | `phase17-rollout.mjs apply` records all 14 checksums, grants, RLS/security checks, legacy columns, and compatibility triggers before any Vercel promotion |
+| NOT RUN | Read-only rollout check | `phase17-rollout.mjs check` produces only PASS results for the approved clean commit, owner connection, roles, and exact ten-applied/five-pending history |
+| NOT RUN | Migration-first rollout | `phase17-rollout.mjs apply` records all 15 checksums, grants, cleanup-function privileges, RLS/security checks, legacy columns, and compatibility triggers before any Vercel promotion |
 | NOT RUN | Moderator provisioning | Exact Auth0 subject and active generation verified; supplied allowlist compared with Vercel; deliberate owner grant recorded without email/display-name inference |
 | NOT RUN | Application smoke | Existing and fresh sessions, Profile, Favorites, reviews, reports, moderator/non-moderator access, logout, and absence of account-deletion UI verified after promotion |
 | NOT RUN | Rollback readiness | Prior immutable deployment and stable Server Action key confirmed; no contract migration; rollback does not reverse the expand migrations |

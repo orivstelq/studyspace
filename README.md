@@ -89,7 +89,7 @@ Integration tests refuse remote hosts and databases outside the local allowlist.
 
 Deployments are migration-first: verify the exact database and recovery point, apply only the reviewed pending migrations, reapply runtime grants, verify database security, then promote the compatible application build. Application rollback promotes the previous immutable deployment without reversing forward-only migrations.
 
-The guarded Phase 17 staging procedure and moderator-grant checks are in [STAGING.md](docs/STAGING.md). The consolidated production sequence and remaining external gates are in [DEPLOYMENT.md](docs/DEPLOYMENT.md).
+The guarded Phase 17 staging procedure and moderator-grant checks are in [STAGING.md](docs/STAGING.md). The consolidated production sequence and remaining external gates are in [DEPLOYMENT.md](docs/DEPLOYMENT.md). Auth0/Google dashboard preparation is in [AUTHENTICATION_RELEASE.md](docs/AUTHENTICATION_RELEASE.md), and the manual account-data request procedure is in [DATA_REQUESTS.md](docs/DATA_REQUESTS.md).
 
 ## Privacy and support
 
@@ -99,7 +99,7 @@ Please report security issues privately using [SECURITY.md](SECURITY.md), not in
 
 ## Documentation
 
-[Product requirements](docs/PRD.md) · [Architecture](docs/ARCHITECTURE.md) · [Data model](docs/DATA_MODEL.md) · [Security specification](docs/SECURITY.md) · [Deployment](docs/DEPLOYMENT.md) · [Staging](docs/STAGING.md) · [Verification record](docs/VERIFICATION.md)
+[Product requirements](docs/PRD.md) · [Architecture](docs/ARCHITECTURE.md) · [Data model](docs/DATA_MODEL.md) · [Security specification](docs/SECURITY.md) · [Authentication release](docs/AUTHENTICATION_RELEASE.md) · [Data requests](docs/DATA_REQUESTS.md) · [Deployment](docs/DEPLOYMENT.md) · [Staging](docs/STAGING.md) · [Verification record](docs/VERIFICATION.md)
 
 ## License
 

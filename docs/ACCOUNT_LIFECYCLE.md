@@ -4,7 +4,7 @@ Status: Phase 17 database foundation implemented and rehearsed; no user-facing o
 
 Public support and privacy contact: [sidstelq11@gmail.com](mailto:sidstelq11@gmail.com).
 
-The Phase 17 expand migrations, authorization hardening, and owner-only repository operations implement the database foundation. They have been exercised against isolated local PostgreSQL 17 and 18 databases and a disposable Neon PostgreSQL 18 branch. They have not been applied to the parent staging branch. There is still no account-deletion route, button, dedicated lifecycle login, Auth0 Management API integration, provider-completion worker, or retention-cleanup schedule. The approved dispositions below remain engineering requirements, not a public claim that deletion is available.
+The Phase 17 expand migrations, authorization hardening, owner-only repository operations, and bounded retention-cleanup function implement the database foundation. The first four expand migrations were exercised against isolated local PostgreSQL 17 and 18 databases and a disposable Neon PostgreSQL 18 branch; the additive cleanup migration has local PostgreSQL coverage but still needs a disposable Neon rehearsal. None has been applied to the parent staging branch. There is still no account-deletion route, button, dedicated lifecycle login, Auth0 Management API integration, provider-completion worker, or deployed lifecycle cleanup schedule. The approved dispositions below remain engineering requirements, not a public claim that deletion is available.
 
 ## Current identity and data boundary
 
@@ -152,11 +152,13 @@ Before any public deletion promise:
 
 Until those checks pass, `/privacy` must not promise a completion time, perfect anonymization, provider deletion, or deletion from backups.
 
-## Cleanup schedule and monitoring proposal — not active
+## Cleanup schedule and monitoring — implemented, not deployed
 
-Use an hourly job with a restricted maintenance login and bounded security-definer functions. Each invocation should delete at most 1,000 rows per category using `FOR UPDATE SKIP LOCKED`. Make expired sessions eligible immediately, ordinary resolved reports eligible at 89 days, and ordinary audits eligible at 179 days; the one-day buffer allows missed or full-batch runs without intentionally crossing the seven-, 90-, or 180-day maximum. Apply the same pre-deadline buffer to approved exception expiries and delete non-public held reviews when their dependencies have ended.
+Migration `20261110190000_add_lifecycle_retention_cleanup` adds a fixed-search-path security-definer function for expired sessions, resolved reports, and moderation actions. The existing hourly maintenance workflow invokes it and rate-limit cleanup in one transaction after verifying the exact restricted staging login. Each invocation deletes at most 1,000 rows per category using `FOR UPDATE SKIP LOCKED`. Expired sessions are eligible immediately, ordinary resolved reports at 89 days, and ordinary audits at 179 days; the one-day buffer allows missed or full-batch runs without intentionally crossing the seven-, 90-, or 180-day maximum. Active, finite audit holds block audit deletion until expiry.
 
-The maintenance identity must have function execution only, not table reads/deletes or lifecycle execution. Alert on function failure, missed hourly runs, oldest eligible row age, repeated full batches, invalid/open-ended holds, and any row beyond its approved deadline. The existing rate-limit cleanup workflow is a pattern, not authorization to add these functions, credentials, secrets, or schedules.
+The maintenance identity has function execution only, not table reads/deletes or account-closure execution. Workflow failures and full batches are visible in GitHub Actions. Alerts for missed runs, oldest eligible row age, invalid holds, and rows past deadline still require external monitoring. Cleanup of expired review holds and non-public review evidence remains tied to the reviewed account-closure/hold workflow rather than this generic job.
+
+The code and schedule do not become active until the migration and grants are deployed and the workflow exists on the deployed default branch with its restricted secret. That external activation requires approval.
 
 ## Required verification and remaining approval gates
 
@@ -174,4 +176,4 @@ Before the workflow can be enabled, tests must prove:
 - moderator allowlist revocation and linked-identity handling work with real Auth0 accounts;
 - a full isolated backup restore re-applies completed closures before serving traffic.
 
-Explicit approval is still required to apply the migrations to the parent staging branch or production, create the dedicated lifecycle identity and grants, expose a reauthenticated confirmation flow, add Auth0 Management API access and a retryable provider outbox, implement retention cleanup functions and schedules, verify linked identities and moderator revocation, approve backup/recovery behavior and public policy wording, and perform any first live deletion. No staging or production deletion should be attempted before those gates are satisfied.
+Explicit approval is still required to rehearse the cleanup migration on disposable Neon, apply migrations to the parent staging branch or production, activate the maintenance schedule, create the dedicated lifecycle identity and grants, expose a reauthenticated confirmation flow, add Auth0 Management API access and a retryable provider outbox, verify linked identities and moderator revocation, approve backup/recovery behavior and public policy wording, and perform any first live deletion. The reviewed manual intake and verification procedure is in `docs/DATA_REQUESTS.md`; its export, provider completion, case-retention, and end-to-end gates remain incomplete. No staging or production deletion should be attempted before those gates are satisfied.

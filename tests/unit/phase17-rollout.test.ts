@@ -74,7 +74,7 @@ describe("Phase 17 staging rollout guard", () => {
         }), { requireRecovery: true, now }).approvedCommit).toBe(approvedCommit);
     });
 
-    it("permits exactly the four reviewed Phase 17 migrations before rollout", () => {
+    it("permits exactly the five reviewed Phase 17 migrations before rollout", () => {
         const local = readLocalMigrations();
         const applied = local.slice(0, 10).map((migration) => ({
             migration_name: migration.name,
@@ -111,16 +111,16 @@ describe("Phase 17 staging rollout guard", () => {
 
     it("resumes only from a checksum-valid prefix of the reviewed Phase 17 set", () => {
         const local = readLocalMigrations();
-        const applied = local.slice(0, 12).map((migration) => ({
+        const applied = local.slice(0, 13).map((migration) => ({
             migration_name: migration.name,
             checksum: migration.checksum,
             finished: true,
             rolled_back: false,
         }));
-        expect(verifyMigrationHistory(local, applied, "resume")).toEqual(local.slice(12).map(({ name }) => name));
+        expect(verifyMigrationHistory(local, applied, "resume")).toEqual(local.slice(13).map(({ name }) => name));
         expect(() => verifyMigrationHistory(local, [
-            ...applied.slice(0, 11),
-            { ...applied[11], migration_name: local[13].name },
+            ...applied.slice(0, 12),
+            { ...applied[12], migration_name: local[14].name },
         ], "resume")).toThrow();
         expect(() => verifyMigrationHistory(local, applied.slice(0, 9), "resume")).toThrow();
     });

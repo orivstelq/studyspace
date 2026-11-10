@@ -239,6 +239,18 @@ BEGIN
         RAISE EXCEPTION 'rate-limit cleanup function grants are incorrect';
     END IF;
 
+    IF has_function_privilege('studyspace_app', 'public.cleanup_expired_lifecycle_records(integer)', 'EXECUTE')
+       OR has_function_privilege('studyspace_saved', 'public.cleanup_expired_lifecycle_records(integer)', 'EXECUTE')
+       OR NOT has_function_privilege('studyspace_maintenance', 'public.cleanup_expired_lifecycle_records(integer)', 'EXECUTE')
+       OR has_table_privilege('studyspace_maintenance', 'public."AuthSession"', 'SELECT')
+       OR has_table_privilege('studyspace_maintenance', 'public."AuthSession"', 'DELETE')
+       OR has_table_privilege('studyspace_maintenance', 'public."UserReport"', 'SELECT')
+       OR has_table_privilege('studyspace_maintenance', 'public."UserReport"', 'DELETE')
+       OR has_table_privilege('studyspace_maintenance', 'public."ModerationAction"', 'SELECT')
+       OR has_table_privilege('studyspace_maintenance', 'public."ModerationAction"', 'DELETE') THEN
+        RAISE EXCEPTION 'account-lifecycle cleanup function grants are incorrect';
+    END IF;
+
     IF NOT EXISTS (
         SELECT 1
         FROM pg_catalog.pg_trigger trigger

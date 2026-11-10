@@ -89,19 +89,19 @@ GRANT studyspace_maintenance TO studyspace_cleanup WITH SET FALSE;
 GRANT studyspace_maintenance TO studyspace_cleanup WITH ADMIN FALSE;
 ```
 
-The maintenance role has schema usage and execution of `cleanup_expired_rate_limit_buckets(integer)` only. It cannot select, insert, update, or directly delete rate-limit rows. The security-definer function removes only buckets whose reset time is more than one day old, orders work by expiry, uses `SKIP LOCKED`, and rejects batch sizes outside 1–10,000.
+The maintenance role has schema usage and execution of the bounded rate-limit and lifecycle cleanup functions only. It cannot directly read or mutate rate-limit, session, report, or moderation tables. The security-definer functions use fixed search paths, ordered `SKIP LOCKED` batches, and validated limits. Lifecycle cleanup makes expired sessions eligible immediately, resolved reports eligible at 89 days, and moderation actions eligible at 179 days unless an active finite audit hold applies.
 
-The committed `.github/workflows/rate-limit-cleanup.yml` scheduler runs hourly at minute 17 and supports controlled manual dispatch. It permits only one non-cancelled run at a time and invokes exactly one 1,000-row batch using the maintenance login—not either runtime role or the migration owner:
+The committed `.github/workflows/rate-limit-cleanup.yml` scheduler runs hourly at minute 17 and supports controlled manual dispatch. It permits only one non-cancelled run at a time and invokes exactly one 1,000-row batch per category using the maintenance login—not either runtime role or the migration owner:
 
 ```sh
-psql "$MAINTENANCE_DATABASE_URL" -f scripts/cleanup-rate-limit-buckets.sql
+psql "$MAINTENANCE_DATABASE_URL" -f scripts/staging/verify-maintenance-connection.sql -f scripts/cleanup-maintenance.sql
 ```
 
-The script applies a 30-second statement timeout and two-second lock timeout. Before calling it, the workflow fails unless the connection is the exact `studyspace_staging_maintenance_login` on `studyspace_staging`, has only the reviewed PostgreSQL 18 membership, retains no elevated attributes or direct bucket-table privileges, and can execute the bounded function. The same `psql` process performs verification and cleanup over TLS with hostname and system-CA verification.
+The script applies a 30-second statement timeout and two-second lock timeout. Before any deletion, the workflow fails unless the connection is the exact `studyspace_staging_maintenance_login` on `studyspace_staging`, has only the reviewed PostgreSQL 18 membership, retains no elevated attributes or direct cleanup-table privileges, and can execute both bounded functions. The same `psql` process performs verification and the atomic cleanup over TLS with hostname and system-CA verification.
 
 For each new staging environment, manually create a GitHub environment named `staging` and add one environment secret named `MAINTENANCE_DATABASE_URL`. Its value must be the direct connection URL for `studyspace_staging_maintenance_login`, without URL-level service, GSS-encryption, `sslmode`, or `sslrootcert` overrides; never use the migration owner, `DATABASE_URL`, or `FAVORITES_DATABASE_URL`. Staging completed this setup: workflow run `42527692806` succeeded on 2026-11-08 with zero deletions from a maximum batch of 1,000.
 
-Every run writes the deletion count to the GitHub Actions job summary. A failed preflight, connection, timeout, lock, or SQL command fails the job visibly. A count of 1,000 adds a warning annotation; inspect the recent run summaries and treat two or more consecutive full hourly batches as backlog. Check database load and incoming traffic before manually dispatching another batch or changing cadence; do not add an unbounded loop or increase the batch size. Configure repository Actions failure notifications for the responsible operator.
+Every run writes all four deletion counts to the GitHub Actions job summary. A failed preflight, connection, timeout, lock, or SQL command fails the job visibly. Any count of 1,000 adds a warning annotation; inspect recent summaries and treat two or more consecutive full hourly batches as backlog. Check database load and incoming traffic before manually dispatching another batch or changing cadence; do not add an unbounded loop or increase the batch size. Configure repository Actions failure notifications for the responsible operator.
 
 ## HTTPS, headers, and authentication
 
@@ -133,6 +133,8 @@ This is the canonical order for the current Phase 17 release. `docs/STAGING.md` 
 9. **Observe before widening access.** Check application errors, database connections, rate-limit cleanup, Auth0 failures, and moderation queues. Do not treat one successful request as load or alerting verification.
 
 Application rollback promotes the previous compatible immutable Vercel deployment. Do not reverse the forward-only expand migrations. If the new schema or grants are wrong, stop writes and use the documented forward-recovery path; use provider restoration only for confirmed data corruption and validate it in isolation before cutover.
+
+Run `npm run verify:release` with the exact HTTPS origin and three ignored real-session storage-state files for the consolidated public/authenticated automation. It deliberately reports fresh interactive login, trusted-ingress spoof resistance, realistic rate limiting, executed rollback, and restored-data integrity as `NOT VERIFIED`; those require controlled live operator evidence.
 
 ### Public launch gates
 

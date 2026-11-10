@@ -33,4 +33,6 @@ GRANT EXECUTE ON FUNCTION public.has_verified_account_context(UUID) TO studyspac
 GRANT EXECUTE ON FUNCTION public.has_verified_moderator_context() TO studyspace_saved;
 REVOKE ALL ON FUNCTION public.cleanup_expired_rate_limit_buckets(INTEGER) FROM PUBLIC, studyspace_app, studyspace_saved, studyspace_maintenance;
 GRANT EXECUTE ON FUNCTION public.cleanup_expired_rate_limit_buckets(INTEGER) TO studyspace_maintenance;
+REVOKE ALL ON FUNCTION public.cleanup_expired_lifecycle_records(INTEGER) FROM PUBLIC, studyspace_app, studyspace_saved, studyspace_maintenance;
+GRANT EXECUTE ON FUNCTION public.cleanup_expired_lifecycle_records(INTEGER) TO studyspace_maintenance;
 COMMIT;

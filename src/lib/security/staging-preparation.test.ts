@@ -138,7 +138,8 @@ describe("staging preparation", () => {
     it("schedules one fail-closed maintenance cleanup batch", () => {
         const workflow = readFileSync(".github/workflows/rate-limit-cleanup.yml", "utf8");
         const verify = readFileSync("scripts/staging/verify-maintenance-connection.sql", "utf8");
-        const cleanup = readFileSync("scripts/cleanup-rate-limit-buckets.sql", "utf8");
+        const cleanup = readFileSync("scripts/cleanup-maintenance.sql", "utf8");
+        const migration = readFileSync("prisma/migrations/20261110190000_add_lifecycle_retention_cleanup/migration.sql", "utf8");
 
         expect(workflow).toContain('cron: "17 * * * *"');
         expect(workflow).toContain("workflow_dispatch:");
@@ -156,12 +157,12 @@ describe("staging preparation", () => {
         expect(workflow).toContain("(gssencmode|service|servicefile|sslmode|sslrootcert)");
         expect(workflow).toContain("persist-credentials: false");
         expect(workflow).toContain("--set=ON_ERROR_STOP=1 --quiet --tuples-only --no-align");
-        expect(workflow).toContain('[[ ! "$deleted_count" =~ ^[0-9]+$ ]]');
+        expect(workflow).toContain('[[ ! "$cleanup_counts" =~ ^[0-9]+\\|[0-9]+\\|[0-9]+\\|[0-9]+$ ]]');
         expect(workflow.indexOf("verify-maintenance-connection.sql")).toBeLessThan(
-            workflow.indexOf("cleanup-rate-limit-buckets.sql"),
+            workflow.indexOf("cleanup-maintenance.sql"),
         );
         expect(workflow.match(/psql -X/g)).toHaveLength(1);
-        expect(workflow.match(/cleanup-rate-limit-buckets\.sql/g)).toHaveLength(1);
+        expect(workflow.match(/cleanup-maintenance\.sql/g)).toHaveLength(1);
         expect(workflow).toContain("repeated full batches indicate a cleanup backlog");
         expect(verify).toContain("session_user <> 'studyspace_staging_maintenance_login'");
         expect(verify).toContain("granted.rolname <> 'studyspace_maintenance'");
@@ -170,9 +171,21 @@ describe("staging preparation", () => {
         for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
             expect(verify).toContain(`has_table_privilege(session_user, 'public."RateLimitBucket"', '${privilege}')`);
         }
+        for (const table of ["AuthSession", "UserReport", "ModerationAction"]) {
+            for (const privilege of ["SELECT", "DELETE"]) {
+                expect(verify).toContain(`has_table_privilege(session_user, 'public."${table}"', '${privilege}')`);
+            }
+        }
+        expect(verify).toContain("cleanup_expired_lifecycle_records(integer)");
         expect(verify).not.toMatch(/^\s*(DELETE|INSERT|UPDATE|TRUNCATE)\s/m);
         expect(cleanup.match(/^SELECT /gm)).toHaveLength(1);
         expect(cleanup).toContain("cleanup_expired_rate_limit_buckets(1000)");
+        expect(cleanup).toContain("cleanup_expired_lifecycle_records(1000)");
+        expect(migration).toContain("FOR UPDATE SKIP LOCKED");
+        expect(migration).toContain("INTERVAL '89 days'");
+        expect(migration).toContain("INTERVAL '179 days'");
+        expect(migration).toContain('hold."expiresAt" > cutoff_time');
+        expect(migration).toContain("batch_size > 1000");
     });
 
     it("pins CI database operations to the PostgreSQL 18 service and verifies targets before migrations", () => {
@@ -205,11 +218,31 @@ describe("staging preparation", () => {
         }
     });
 
+    it("provides one credential-safe release smoke command without overstating live evidence", () => {
+        const packageJson = readFileSync("package.json", "utf8");
+        const release = readFileSync("scripts/verify-release.mjs", "utf8");
+        const publicVerifier = readFileSync("scripts/verify-staging.mjs", "utf8");
+
+        expect(packageJson).toContain('"verify:release": "node scripts/verify-release.mjs"');
+        for (const state of ["PLAYWRIGHT_USER_A_STATE", "PLAYWRIGHT_USER_B_STATE", "PLAYWRIGHT_MODERATOR_STATE"]) {
+            expect(release).toContain(state);
+        }
+        expect(release).toContain('git", ["ls-files", "--error-unmatch"');
+        expect(release).toContain('git", ["check-ignore", "--quiet"');
+        expect(release).toContain('tests/e2e/public.spec.ts');
+        expect(release).toContain('tests/e2e/live-auth.spec.ts');
+        expect(release).toContain('tests/e2e/authenticated.spec.ts');
+        expect(release.match(/NOT VERIFIED/g)).toHaveLength(3);
+        expect(publicVerifier).toContain('verifyPage(baseUrl, "/privacy")');
+        expect(publicVerifier).toContain('verifyPage(baseUrl, "/terms")');
+    });
+
     it("keeps the Phase 17 rollout migration-first, credential-safe, and separate from moderator grants", () => {
         const rollout = readFileSync("scripts/staging/phase17-rollout.mjs", "utf8");
         const verify = readFileSync("scripts/staging/verify-database-security.sql", "utf8");
         expect(rollout).not.toContain('import "dotenv/config"');
         expect(rollout).toContain('"20261110170000_harden_account_context_authorization"');
+        expect(rollout).toContain('"20261110190000_add_lifecycle_retention_cleanup"');
         expect(rollout).toContain('directUrl.searchParams.set("sslmode", "verify-full")');
         expect(rollout).toContain('PGSSLROOTCERT: "system"');
         expect(rollout).toContain('PGSSLMODE: "verify-full"');

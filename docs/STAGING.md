@@ -20,7 +20,7 @@ The existing permission roles remain group roles and are not recreated:
 | --- | --- | --- | --- |
 | `studyspace_app` | no | no | Published listings and approved public review reads |
 | `studyspace_saved` | no | no | Session, account-scoped private data, community mutations, shared rate limits, and narrow identity/context functions |
-| `studyspace_maintenance` | no | no | Execute the bounded rate-limit cleanup function only |
+| `studyspace_maintenance` | no | no | Execute the bounded rate-limit and lifecycle-retention cleanup functions only |
 
 After explicit approval, create exactly three environment-specific login identities:
 
@@ -40,7 +40,7 @@ The authorization migration does not infer or backfill moderators: PostgreSQL ca
 
 ## Phase 17 controlled rollout
 
-The parent staging branch is the Neon branch named `production` inside project `curly-paper-15884428`; that provider label does not make it a public production environment. Its direct endpoint hostname and branch ID must be copied from the Neon dashboard immediately before release. They are deliberately not guessed or hardcoded. The rollout guard rejects pooled hosts, the disposable rehearsal endpoint and branch ID, any database other than `studyspace_staging`, any user other than `neondb_owner`, PostgreSQL outside major 18, a dirty or unapproved source commit, and any migration history other than the ten reviewed baseline migrations followed by the exact four Phase 17 migrations.
+The parent staging branch is the Neon branch named `production` inside project `curly-paper-15884428`; that provider label does not make it a public production environment. Its direct endpoint hostname and branch ID must be copied from the Neon dashboard immediately before release. They are deliberately not guessed or hardcoded. The rollout guard rejects pooled hosts, the disposable rehearsal endpoint and branch ID, any database other than `studyspace_staging`, any user other than `neondb_owner`, PostgreSQL outside major 18, a dirty or unapproved source commit, and any migration history other than the ten reviewed baseline migrations followed by the exact five Phase 17 migrations.
 
 Have the approved secret manager inject `DIRECT_URL`; do not paste it into the command line or a tracked file. Supply these non-secret release assertions in the operator environment:
 
@@ -64,7 +64,9 @@ Immediately before mutation, confirm in Neon that the parent branch still has a 
 node scripts/staging/phase17-rollout.mjs apply
 ```
 
-`apply` repeats every read-only gate, applies the four migrations through `prisma migrate deploy`, reapplies `grant-runtime-roles.sql`, runs the full database security verifier, and requires all 14 names and checksums afterward. It stops before application deployment. The security verifier also requires the legacy ownership columns and five dual-write triggers needed by the currently deployed application and code rollback. If an interruption occurs after one or more reviewed Phase 17 migrations commit, `apply` accepts only that exact checksum-valid migration prefix and resumes the remaining suffix; it can also safely reapply grants and verification after all 14 migrations. A failed migration row or any non-prefix history still stops the command. The old application remains in service while the operator repairs forward. Never reverse or edit an applied migration.
+`apply` repeats every read-only gate, applies the five migrations through `prisma migrate deploy`, reapplies `grant-runtime-roles.sql`, runs the full database security verifier, and requires all 15 names and checksums afterward. It stops before application deployment. The security verifier also requires the legacy ownership columns and five dual-write triggers needed by the currently deployed application and code rollback. If an interruption occurs after one or more reviewed Phase 17 migrations commit, `apply` accepts only that exact checksum-valid migration prefix and resumes the remaining suffix; it can also safely reapply grants and verification after all 15 migrations. A failed migration row or any non-prefix history still stops the command. The old application remains in service while the operator repairs forward. Never reverse or edit an applied migration.
+
+The first four Phase 17 migrations were rehearsed on the disposable Neon branch. The fifth migration adds only the bounded maintenance function and grants, but it must receive its own disposable Neon PostgreSQL 18 rehearsal before parent staging approval.
 
 ### Owner-only moderator grant
 

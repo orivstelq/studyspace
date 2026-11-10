@@ -22,7 +22,8 @@ describe("public legal information", () => {
         expect(html).toContain("<h1");
         expect(html).toContain("Privacy information</h1>");
         expect(html).toContain("Owner review required before public launch");
-        expect(html).toContain("approved engineering targets but does not yet enforce them through a deployed retention schedule");
+        expect(html).toContain("repository code for bounded cleanup, but does not yet enforce them through a deployed retention schedule");
+        expect(html).toContain("Requests require identity verification and manual review");
         expect(html).toContain("does not yet offer an account-wide deletion workflow");
         expect(html).toContain('id="support"');
         expect(html).toContain(`href="${publicContact.href}"`);

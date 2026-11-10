@@ -69,7 +69,7 @@ export default function PrivacyPage() {
 
                 <PolicySection id="retention" title="Retention and deletion status">
                     <p className="mt-3">
-                        StudySpace has approved engineering targets but does not yet enforce them through a deployed retention schedule: resolved reports should be removed no later than 90 days after resolution, open reports should remain only until resolution and then for no more than 90 days, moderation and security audit records should remain no more than 180 days except for documented limited holds, and expired application-session rows should be removed within seven days. These are implementation targets, not a claim that automated deletion is currently active.
+                        StudySpace has approved engineering targets and repository code for bounded cleanup, but does not yet enforce them through a deployed retention schedule: resolved reports should be removed no later than 90 days after resolution, open reports should remain only until resolution and then for no more than 90 days, moderation and security audit records should remain no more than 180 days except for documented limited holds, and expired application-session rows should be removed within seven days. These are implementation targets, not a claim that automated deletion is currently active.
                     </p>
                     <p className="mt-3">
                         StudySpace does not yet offer an account-wide deletion workflow. A signed-in user can remove individual favorites, edit preferences, sign out, and withdraw a review, but those controls do not delete every record associated with an account. The repository contains a local database foundation for a future authenticated deletion workflow; reauthentication, provider deletion, scheduled retention enforcement, backup behavior, and recovery still require verification before it can be offered.
@@ -78,7 +78,7 @@ export default function PrivacyPage() {
 
                 <PolicySection id="support" title="Support and privacy requests">
                     <p className="mt-3">
-                        For privacy questions, account-data requests, or deletion inquiries, email <a href={publicContact.href} className="font-semibold text-harbor underline">{publicContact.email}</a>. StudySpace does not yet offer an automated account-wide deletion workflow, and the unresolved retention and deletion decisions described above still apply.
+                        For privacy questions, account-data requests, or deletion inquiries, email <a href={publicContact.href} className="font-semibold text-harbor underline">{publicContact.email}</a>. Requests require identity verification and manual review. StudySpace does not yet offer an operationally verified account-wide deletion workflow, and the unresolved retention, provider, backup, and legal decisions described above still apply.
                     </p>
                 </PolicySection>
 

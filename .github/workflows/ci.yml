@@ -179,4 +179,6 @@ jobs:
         run: npm audit
 
       - name: Validate staging verifier syntax
-        run: node --check scripts/verify-staging.mjs
+        run: |
+          node --check scripts/verify-staging.mjs
+          node --check scripts/verify-release.mjs

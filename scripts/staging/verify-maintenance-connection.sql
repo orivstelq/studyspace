@@ -55,10 +55,20 @@ BEGIN
         session_user,
         'public.cleanup_expired_rate_limit_buckets(integer)',
         'EXECUTE'
+    ) OR NOT has_function_privilege(
+        session_user,
+        'public.cleanup_expired_lifecycle_records(integer)',
+        'EXECUTE'
     ) OR has_table_privilege(session_user, 'public."RateLimitBucket"', 'SELECT')
        OR has_table_privilege(session_user, 'public."RateLimitBucket"', 'INSERT')
        OR has_table_privilege(session_user, 'public."RateLimitBucket"', 'UPDATE')
-       OR has_table_privilege(session_user, 'public."RateLimitBucket"', 'DELETE') THEN
+       OR has_table_privilege(session_user, 'public."RateLimitBucket"', 'DELETE')
+       OR has_table_privilege(session_user, 'public."AuthSession"', 'SELECT')
+       OR has_table_privilege(session_user, 'public."AuthSession"', 'DELETE')
+       OR has_table_privilege(session_user, 'public."UserReport"', 'SELECT')
+       OR has_table_privilege(session_user, 'public."UserReport"', 'DELETE')
+       OR has_table_privilege(session_user, 'public."ModerationAction"', 'SELECT')
+       OR has_table_privilege(session_user, 'public."ModerationAction"', 'DELETE') THEN
         RAISE EXCEPTION 'maintenance cleanup privileges are incorrect';
     END IF;
 END
