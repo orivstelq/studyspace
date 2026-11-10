@@ -71,6 +71,8 @@ looking for study-friendly spaces.
 /sign-in           Authentication
 /profile           Personal preferences
 /admin             Restricted administration
+/privacy           Public privacy information and unresolved decisions
+/terms             Public terms information and unresolved decisions
 
 ## 6. Study-Space Data
 

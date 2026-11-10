@@ -196,6 +196,8 @@ public APIs or analytics.
 Define data retention and deletion policies
 before production launch.
 
+The public `/privacy` and `/terms` pages must not claim that unresolved retention, deletion, operator, contact, or legal decisions are settled. The current pages are marked as engineering drafts. Account-wide deletion is not implemented; its security design and required owner decisions are tracked in `docs/ACCOUNT_LIFECYCLE.md`.
+
 ## 11. Dependency and Supply-Chain Security
 
 - Maintain package-lock.json
