@@ -26,17 +26,18 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready --username=postgres --dbname=postgres"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     env:
-      POSTGRES_ADMIN_URL: postgresql://postgres:ci-owner-password@localhost:5432/postgres
-      DIRECT_URL: postgresql://postgres:ci-owner-password@localhost:5432/studyspace_dev
-      TEST_DIRECT_URL: postgresql://postgres:ci-owner-password@localhost:5432/studyspace_test
-      DATABASE_URL: postgresql://studyspace_ci_app_login:ci-app-password@localhost:5432/studyspace_dev
-      FAVORITES_DATABASE_URL: postgresql://studyspace_ci_saved_login:ci-saved-password@localhost:5432/studyspace_dev
+      POSTGRES_ADMIN_URL: postgresql://postgres:ci-owner-password@127.0.0.1:5432/postgres
+      DIRECT_URL: postgresql://postgres:ci-owner-password@127.0.0.1:5432/studyspace_dev
+      TEST_DIRECT_URL: postgresql://postgres:ci-owner-password@127.0.0.1:5432/studyspace_test
+      DATABASE_URL: postgresql://studyspace_ci_app_login:ci-app-password@127.0.0.1:5432/studyspace_dev
+      FAVORITES_DATABASE_URL: postgresql://studyspace_ci_saved_login:ci-saved-password@127.0.0.1:5432/studyspace_dev
+      STUDYSPACE_TEST_DATABASE: studyspace_test
       APP_BASE_URL: http://localhost:3000
       RATE_LIMIT_SECRET: ci-only-rate-limit-secret-with-at-least-32-characters
       TRUSTED_CLIENT_IP_SOURCE: shared
@@ -77,6 +78,30 @@ jobs:
           CREATE DATABASE studyspace_dev;
           CREATE DATABASE studyspace_test;
           SQL
+
+      - name: Verify PostgreSQL service and database targets
+        run: |
+          pg_isready --host=127.0.0.1 --port=5432 --username=postgres --dbname=postgres --timeout=5
+
+          verify_target() {
+            local database_url="$1"
+            local expected_database="$2"
+            local actual
+
+            actual="$(
+              psql "$database_url" -X -v ON_ERROR_STOP=1 --tuples-only --no-align \
+                --command="SELECT current_database() || '|' || session_user || '|' || current_user || '|' || CASE WHEN current_setting('server_version_num')::integer >= 180000 AND current_setting('server_version_num')::integer < 190000 THEN 'pg18' ELSE 'wrong-version' END"
+            )"
+
+            if [[ "$actual" != "$expected_database|postgres|postgres|pg18" ]]; then
+              echo "::error::Unexpected PostgreSQL target identity: $actual"
+              return 1
+            fi
+          }
+
+          verify_target "$POSTGRES_ADMIN_URL" postgres
+          verify_target "$DIRECT_URL" studyspace_dev
+          verify_target "$TEST_DIRECT_URL" studyspace_test
 
       - name: Verify PostgreSQL 18 and role inheritance
         run: |

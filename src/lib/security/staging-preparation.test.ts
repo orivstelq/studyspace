@@ -164,6 +164,23 @@ describe("staging preparation", () => {
         expect(cleanup).toContain("cleanup_expired_rate_limit_buckets(1000)");
     });
 
+    it("pins CI database operations to the PostgreSQL 18 service and verifies targets before migrations", () => {
+        const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+
+        expect(workflow).toContain("image: postgres:18");
+        expect(workflow).not.toContain("@localhost:5432");
+        expect(workflow.match(/@127\.0\.0\.1:5432/g)).toHaveLength(5);
+        expect(workflow).toContain('--health-cmd "pg_isready --username=postgres --dbname=postgres"');
+        expect(workflow).toContain("STUDYSPACE_TEST_DATABASE: studyspace_test");
+        expect(workflow).toContain("pg_isready --host=127.0.0.1 --port=5432");
+        expect(workflow).toContain('verify_target "$POSTGRES_ADMIN_URL" postgres');
+        expect(workflow).toContain('verify_target "$DIRECT_URL" studyspace_dev');
+        expect(workflow).toContain('verify_target "$TEST_DIRECT_URL" studyspace_test');
+        expect(workflow.indexOf("Verify PostgreSQL service and database targets")).toBeLessThan(
+            workflow.indexOf("Apply committed migrations and runtime grants"),
+        );
+    });
+
     it("keeps public Review access column-scoped", () => {
         const grants = readFileSync("scripts/grant-runtime-roles.sql", "utf8");
         const verify = readFileSync("scripts/staging/verify-database-security.sql", "utf8");
