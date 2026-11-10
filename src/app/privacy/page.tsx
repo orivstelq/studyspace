@@ -19,7 +19,7 @@ export default function PrivacyPage() {
             <aside className="mt-8 grid rounded-2xl border border-dune bg-linen/50 p-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10 lg:p-6" aria-labelledby="privacy-review-heading">
                 <h2 id="privacy-review-heading" className="font-semibold">Owner review required before public launch</h2>
                 <p className="mt-2 max-w-2xl leading-7 text-muted lg:mt-0">
-                    This is not a finalized privacy policy. The operator identity, retention periods, account-deletion process, legal jurisdiction, and provider disclosures still require owner review.
+                    This is not a finalized privacy policy. Formal operator details, operational retention enforcement, the account-deletion process, legal jurisdiction, and provider disclosures still require owner review.
                 </p>
             </aside>
 
@@ -69,10 +69,10 @@ export default function PrivacyPage() {
 
                 <PolicySection id="retention" title="Retention and deletion status">
                     <p className="mt-3">
-                        StudySpace does not yet have a published retention schedule or an account-wide deletion workflow. A signed-in user can remove individual favorites, edit preferences, sign out, and withdraw a review. Those controls do not delete every record associated with an account.
+                        StudySpace has approved engineering targets but does not yet enforce them through a deployed retention schedule: resolved reports should be removed no later than 90 days after resolution, open reports should remain only until resolution and then for no more than 90 days, moderation and security audit records should remain no more than 180 days except for documented limited holds, and expired application-session rows should be removed within seven days. These are implementation targets, not a claim that automated deletion is currently active.
                     </p>
                     <p className="mt-3">
-                        The repository contains a local database foundation for a future authenticated deletion workflow, but no account-deletion control or cloud workflow is offered. Reauthentication, provider deletion, scheduled retention enforcement, backup behavior, and recovery still require verification before that workflow can be offered.
+                        StudySpace does not yet offer an account-wide deletion workflow. A signed-in user can remove individual favorites, edit preferences, sign out, and withdraw a review, but those controls do not delete every record associated with an account. The repository contains a local database foundation for a future authenticated deletion workflow; reauthentication, provider deletion, scheduled retention enforcement, backup behavior, and recovery still require verification before it can be offered.
                     </p>
                 </PolicySection>
 
@@ -85,7 +85,7 @@ export default function PrivacyPage() {
                 <PolicySection id="review-items" title="Decisions still requiring owner review">
                     <ul className="mt-3 list-disc space-y-2 pl-6">
                         <li>Operator identity, formal notice details, and applicable jurisdiction.</li>
-                        <li>Retention periods for account, community, security, provider-log, and backup data.</li>
+                        <li>Deployment and monitoring of the approved application retention targets, plus provider-log and backup retention.</li>
                         <li>Account deletion, export, correction, and appeal procedures.</li>
                         <li>Production service providers, regions, subprocessors, and Google/Auth0 connection settings.</li>
                         <li>Audience and age requirements, including whether minors may create accounts.</li>
@@ -95,7 +95,7 @@ export default function PrivacyPage() {
 
             <div className="mt-12 grid border-t border-clay pt-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
                 <p className="max-w-2xl text-sm text-muted lg:col-start-2">
-                    Engineering draft last reviewed <time dateTime="2026-11-09">November 9, 2026</time>.
+                    Engineering draft last reviewed <time dateTime="2026-11-10">November 10, 2026</time>.
                 </p>
             </div>
         </main>

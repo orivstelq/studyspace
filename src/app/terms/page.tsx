@@ -76,7 +76,7 @@ export default function TermsPage() {
 
             <div className="mt-12 grid border-t border-clay pt-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
                 <p className="max-w-2xl text-sm text-muted lg:col-start-2">
-                    Engineering draft last reviewed <time dateTime="2026-11-09">November 9, 2026</time>.
+                    Engineering draft last reviewed <time dateTime="2026-11-10">November 10, 2026</time>.
                 </p>
             </div>
         </main>

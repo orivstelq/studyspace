@@ -1,48 +1,69 @@
 # StudySpace
 
-StudySpace helps students find places for individual or group study. The directory searches PostgreSQL, shows where listing information came from, and keeps Saved collections and study preferences private to each signed-in account.
+[![CI](https://github.com/orivstelq/studyspace/actions/workflows/ci.yml/badge.svg)](https://github.com/orivstelq/studyspace/actions/workflows/ci.yml)
+
+StudySpace is a full-stack directory for finding study-friendly places. It combines public search and verified listing provenance with private Saved collections, study preferences, recommendations, reviews, reports, and moderator workflows.
+
+[View the staging site](https://studyspace-staging.vercel.app) · [Architecture](docs/ARCHITECTURE.md) · [Security](SECURITY.md) · [Deployment](docs/DEPLOYMENT.md)
+
+## Project status
+
+StudySpace is an independently operated portfolio project preparing for its first public release. Public browsing is suitable for a limited launch after the documented staging migration and smoke checks. Unrestricted public account enrollment remains gated on finalized privacy/terms decisions, operational retention enforcement, production Auth0 social credentials, and live moderator testing.
+
+Account-wide deletion is not currently offered and is not advertised as a released feature. The database foundation and remaining approval gates are documented in [Account lifecycle](docs/ACCOUNT_LIFECYCLE.md).
+
+## Features
+
+- Responsive public directory with search, category and amenity filters
+- Published listing details with source and verification information
+- Auth0 sign-in, sign-out, revocable server-side sessions, and account identity display
+- Account-isolated Saved listings and study preferences
+- Explainable, deterministic recommendations
+- One review per account and listing, with approval required before publication
+- Private reports and an allowlisted, database-granted moderator interface
+- Shared PostgreSQL rate limits, security headers, origin checks, and production-safe error responses
+- Public privacy, terms, and contact information that distinguishes current behavior from unresolved policy
+
+## Stack
+
+- Next.js 16, React 19, and TypeScript
+- Prisma 7 with PostgreSQL 18
+- Auth0 for authentication
+- Vercel and Neon in the reviewed deployment architecture
+- Vitest and Playwright
+
+The application uses separate database identities for public reads, private account data, migrations, and bounded maintenance. PostgreSQL row-level security and server-side ownership checks protect Profiles, Favorites, Reviews, Reports, and moderation data. See [Security](docs/SECURITY.md) for the trust boundaries and known limitations.
 
 ## Run locally
 
-Use Node.js 24 and PostgreSQL 17 or 18. Pull-request CI validates the committed migrations and integration suite on PostgreSQL 18. From the project root:
+Use Node.js 24 and PostgreSQL 17 or 18. Pull-request CI runs the committed migration chain on PostgreSQL 18.
 
 ```sh
 npm ci
 cp .env.example .env
-```
-
-Create separate development and test databases named `studyspace_dev` and `studyspace_test`. Use a migration owner with permission to create the schema, two non-owner login roles named `studyspace_app` and `studyspace_saved`, and a no-login `studyspace_maintenance` role. Give runtime logins separate passwords. Keep them out of Git and put the development connection URLs in `.env`. Runtime and maintenance roles must be non-superusers without `BYPASSRLS` or membership in the migration owner role.
-
-Generate the client, migrate the development database, and apply the runtime grants. Replace the shell variables below with URLs supplied securely to your shell. Prisma reads `DIRECT_URL` from `.env` if it is unset in the shell.
-
-```sh
 npx prisma generate
 npx prisma migrate deploy
 psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f scripts/grant-runtime-roles.sql
 npm run dev
 ```
 
-Set `RATE_LIMIT_SECRET` to an independent random secret in production. Local development can fall back to `AUTH0_SECRET`, or to a development-only constant when authentication is not configured. Production intentionally fails closed without the dedicated value. Set `TRUSTED_CLIENT_IP_SOURCE=shared` locally; the reviewed direct-Vercel deployment uses `vercel` and requires a live header check before launch.
+Create separate `studyspace_dev` and `studyspace_test` databases. `DIRECT_URL` must use the migration owner. `DATABASE_URL` and `FAVORITES_DATABASE_URL` must use separate non-owner runtime logins inheriting only `studyspace_app` and `studyspace_saved`, respectively. Keep all real credentials in the ignored local `.env`; the committed example contains placeholders only.
 
-Run the grant script as the same migration owner that creates application tables. It removes default runtime access to future tables; grant public or private access explicitly after reviewing each new table.
+The directory starts empty. [LISTINGS.md](docs/LISTINGS.md) explains how to load the two reviewed San Marcos listings.
 
-Open [StudySpace locally](http://localhost:3000). The directory starts empty. The [listing review guide](docs/LISTINGS.md) explains how to import the two reviewed San Marcos listings.
+### Authentication
 
-## Enable sign-in and private features
+Public browsing works without Auth0. To enable account features, configure an Auth0 Regular Web Application and set the server-only variables described in [.env.example](.env.example). StudySpace requests only `openid profile email`, stores a bounded account label, and does not persist provider access or refresh tokens.
 
-1. Create an Auth0 Regular Web Application and enable a login connection. Keep one issuer per StudySpace environment. StudySpace requests `openid profile email` and stores only the resolved display name—or email fallback—needed by the account UI.
-2. Set `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `APP_BASE_URL`, and `FAVORITES_DATABASE_URL` in the server environment. Use a single fixed base URL. Generate `AUTH0_SECRET` with `openssl rand -hex 32` and store it securely.
-3. Assign moderators through the server-only `AUTH0_MODERATOR_SUBJECTS` variable as a comma-separated list of exact Auth0 subject IDs. Never accept roles from forms, query parameters, or unverified claims.
-4. Register `http://localhost:3000/auth/callback` as the local callback and `http://localhost:3000` as the local logout URL. In production, use the exact HTTPS equivalents. If supported by the tenant, register `/auth/backchannel-logout` at the deployed origin for provider-initiated revocation.
-5. Sign in from Saved, save a listing from its detail page, and verify the listing appears in Saved. Remove it from either page. Visit Profile, save preferences, and review the explained recommendation scores. Listing pages also allow review submission and private reports; configured moderators use `/admin`.
+Use exact callback and logout origins. Assign moderators with both an exact subject in `AUTH0_MODERATOR_SUBJECTS` and an owner-provisioned active `ModeratorGrant`; neither browser fields nor display names establish moderator authority.
 
-Browse and search work without Auth0 configuration. Authentication sessions are revocable server-side and expire after at most eight hours. The application stores the identity and session identifiers it needs, plus one optional account display label; it does not persist provider tokens or separate profile fields. Schedule deletion of expired `AuthSession` rows through a maintenance account. Changing the issuer requires an explicit account migration to preserve saved items.
+### Rate limiting
 
-Sessions created before account labels were introduced remain valid and display a neutral Account label. Sign out and back in once to populate the label from the newly requested claims.
+Production requires an independent `RATE_LIMIT_SECRET` of at least 32 bytes and an explicitly reviewed `TRUSTED_CLIENT_IP_SOURCE`. The selected direct-Vercel architecture uses `vercel`; local development uses `shared`. The bounded maintenance cleanup procedure is documented in [Deployment](docs/DEPLOYMENT.md).
 
 ## Verify
 
-Apply migrations and runtime grants to a clean local `studyspace_test` database using its migration-owner URL:
+Apply migrations and runtime grants to a clean local test database first, then run:
 
 ```sh
 DIRECT_URL="$TEST_OWNER_URL" npx prisma migrate deploy
@@ -50,19 +71,36 @@ psql "$TEST_OWNER_URL" -v ON_ERROR_STOP=1 -f scripts/grant-runtime-roles.sql
 npm test
 npm run test:integration
 npm run lint
+npx next typegen
+npx tsc --noEmit
+npx prisma validate
 npm run build
 npm run test:e2e
 npm audit
 ```
 
-Integration tests read development URLs from `.env` and switch to `studyspace_test`. They refuse non-loopback hosts and other database names. The test database should contain no starter listings.
+Integration tests refuse remote hosts and databases outside the local allowlist. Public Playwright tests need no account. Authenticated tests accept ignored, environment-local storage-state files created from dedicated Auth0 test accounts; never commit, print, or upload those files.
 
-Playwright runs against a production build and expects the reviewed San Marcos fixture in the development database. Public browser tests need no account. Optional account-menu coverage reads `PLAYWRIGHT_USER_A_STATE` (or the legacy `PLAYWRIGHT_AUTH_STATE`) from an ignored environment-local file. The live community suite additionally uses `PLAYWRIGHT_USER_B_STATE` and `PLAYWRIGHT_MODERATOR_STATE`; these must be real Auth0 sessions for dedicated test accounts. Set `PLAYWRIGHT_BASE_URL` to an origin-only HTTPS staging URL to test a deployed environment; leaving it unset preserves the local server at `http://127.0.0.1:3100`. Never commit, print, or upload a storage-state file or real credential. See the [staging guide](docs/STAGING.md) for prerequisites and the [deployment guide](docs/DEPLOYMENT.md) for production checks.
+## Public API
 
-`GET /api/spaces` accepts `q`, `category`, `amenity`, and `page`. It returns up to 20 published listings per page, the number of listings on the current page, and a `hasNext` flag. Search matches a literal, case-insensitive substring of the name, description, city, or region. Page order uses name and a stable tie-breaker. If listings change between requests, offset pagination can shift the results. `GET /api/spaces/[slug]` returns a single published listing or a generic 404.
+`GET /api/spaces` accepts `q`, `category`, `amenity`, and `page`, returning at most 20 published listings per page. `GET /api/spaces/[slug]` returns one published listing or a generic 404. Both endpoints expose only public listing fields.
 
-Each signed-in account may keep one review per published listing. New reviews and edits are pending until approved; editing an approved review temporarily removes it from public view rather than preserving the previous version. Withdrawal also removes a review from public view. Reports are readable only by configured moderators. Moderation transitions are enforced server-side and recorded in an append-only audit table.
+## Deployment
 
-`/privacy` and `/terms` publish verified project behavior and clearly mark unresolved operator, retention, deletion, and legal decisions. They are engineering drafts, not finalized policies. The public contact for support and privacy requests is [sidstelq11@gmail.com](mailto:sidstelq11@gmail.com). No account-wide deletion workflow is implemented; the reviewed design and open decisions are recorded in [Account lifecycle](docs/ACCOUNT_LIFECYCLE.md).
+Deployments are migration-first: verify the exact database and recovery point, apply only the reviewed pending migrations, reapply runtime grants, verify database security, then promote the compatible application build. Application rollback promotes the previous immutable deployment without reversing forward-only migrations.
 
-[Product requirements](docs/PRD.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Staging](docs/STAGING.md) · [Staging checklist](docs/STAGING_CHECKLIST.md) · [Data model](docs/DATA_MODEL.md) · [Security](docs/SECURITY.md) · [Account lifecycle](docs/ACCOUNT_LIFECYCLE.md) · [Verification record](docs/VERIFICATION.md)
+The guarded Phase 17 staging procedure and moderator-grant checks are in [STAGING.md](docs/STAGING.md). The consolidated production sequence and remaining external gates are in [DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Privacy and support
+
+The public privacy and terms routes describe implemented behavior and clearly label unresolved decisions. For support, moderation, privacy, or account-data questions, contact [sidstelq11@gmail.com](mailto:sidstelq11@gmail.com).
+
+Please report security issues privately using [SECURITY.md](SECURITY.md), not in a public issue.
+
+## Documentation
+
+[Product requirements](docs/PRD.md) · [Architecture](docs/ARCHITECTURE.md) · [Data model](docs/DATA_MODEL.md) · [Security specification](docs/SECURITY.md) · [Deployment](docs/DEPLOYMENT.md) · [Staging](docs/STAGING.md) · [Verification record](docs/VERIFICATION.md)
+
+## License
+
+No open-source license has been selected. Public repository visibility permits viewing the source but does not grant permission to copy, modify, or redistribute it. The owner should choose and add a license only after deciding the intended reuse terms.

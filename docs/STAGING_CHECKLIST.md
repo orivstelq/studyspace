@@ -21,13 +21,21 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 | Runtime boundary | Public/Saved permissions, two synthetic-account isolation, legacy ownership mappings, 12 verified-context policies, seven legacy-compatibility policies, no-grant moderator denial, and denial of the retired UUID/boolean context function passed. | Catalog and grant checks are not executed old-application behavior. Positive/revoked moderator grants were verified only in local integration tests. |
 | Compatibility | Local PostgreSQL integration tests executed legacy Profile, Favorite, Review, report, and moderation reads and writes against the expanded schema. | The baseline application binary and live Vercel/Auth0 flows were not run against the disposable branch. |
 
+## Recorded public-launch preparation evidence — 2026-11-10
+
+| Evidence | Recorded result | Scope limitation |
+| --- | --- | --- |
+| Reachable-history scan | All 52 reachable commits and 872 reachable objects were checked for private-key markers, common provider-token formats, JWT-shaped values, credential-bearing PostgreSQL URLs, environment files, logs, screenshots, and Playwright state. Matches were limited to documented placeholders, CI-only local credentials, environment-variable references, the approved public contact, and documented infrastructure metadata. | Pattern scanning cannot prove that an arbitrary unstructured secret is absent. GitHub author metadata includes the owner's full name, which requires owner acceptance before visibility changes. |
+| Public staging headers | Read-only HTTPS HEAD requests to `/`, `/privacy`, and `/terms` returned 200 with one-year HSTS, the documented CSP, `nosniff`, referrer policy, permissions policy, and no `X-Powered-By`. | This did not query database-backed routes, test CSP violations in a browser, verify HTTP-to-HTTPS redirect, or test forwarded-header trust. |
+| Local release gates | 127 unit tests, 33 PostgreSQL integration tests against `studyspace_test_recovery`, ESLint, TypeScript, Prisma validation, webpack production build, four public Playwright tests, and `npm audit` passed. | The connected-browser list was empty; authenticated and moderator Playwright tests were not executed. GitHub CI must rerun for the final commit. |
+
 ## Source and build
 
 | Status | Gate | Required evidence |
 | --- | --- | --- |
-| NOT RUN | Approved commit | PR #3 commit SHA reviewed; no local-only change assumed deployed |
-| NOT RUN | CI | GitHub Actions URL showing lint, typecheck, unit, PostgreSQL 18 integration, production build, public Playwright, and audit results |
-| NOT RUN | Secret scan | Reviewed staged-file list and automated scan showing no `.env`, URL, password, cookie, token, or Playwright state |
+| NOT RUN | Approved commit | PR #4 final commit SHA reviewed; no local-only change assumed deployed |
+| NOT RUN | CI | PR #4 Actions URL for the final commit showing lint, typecheck, unit, PostgreSQL 18 integration, production build, public Playwright, and audit results |
+| PASS | Secret scan | 2026-11-10 reachable-history and tracked-artifact scan described above; no real credential or authenticated state was identified |
 | PASS | Immutable build | 2026-11-08: Vercel staging deployment is Ready at source commit `70e2bf4` |
 
 ## Neon database

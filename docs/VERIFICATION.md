@@ -142,3 +142,22 @@ These are provider-reported and manual staging results. They are separate from a
 - Production ingress-header trust, realistic load testing, monitoring, and alerting remain unverified.
 
 The staging deployment has meaningful functional and operational smoke evidence, but it is not evidence of commercial production readiness. Production still requires isolated production services and credentials, an approved recovery window and backup plan, full restore and rollback rehearsals, production ingress verification, realistic load testing, monitoring and alerting, and completed authenticated/moderator automation.
+
+## 2026-11-10 — Public v1 launch-readiness review
+
+The local product and security review made one application correction: when Auth0 is deliberately unavailable, the header no longer advertises a Sign in link that can only return 503. Unit coverage verifies the disabled, guest, and verified-account menu states. No database model, migration, grant, authentication provider setting, or cloud resource changed.
+
+Local verification passed:
+
+- 127 unit tests in 23 files
+- 33 PostgreSQL integration tests in seven files, explicitly using only `studyspace_test_recovery`
+- ESLint, generated route types, TypeScript, and Prisma schema validation
+- Next.js 16 production build using the supported webpack fallback; the existing Auth0 SDK dynamic-dependency warning remains
+- Four public Chromium Playwright tests, including 390 px and desktop layout checks
+- `npm audit` with zero known vulnerabilities
+
+A read-only reachable-history review covered 52 commits and 872 objects across every local ref. No tracked `.env` other than `.env.example`, private key, common provider token, JWT-shaped credential, authenticated Playwright state, log, screenshot, or generated report was identified. Credential-shaped matches were limited to placeholder local URLs, ephemeral CI-only credentials, environment-variable references, and deliberately documented staging identifiers. The approved public contact email appears in source and documentation. Commit metadata also exposes the owner's full name; repository visibility must not change until the owner accepts that disclosure. This pattern-based review reduces but cannot eliminate the risk of an arbitrary unstructured secret.
+
+Read-only HEAD requests to the existing staging origin returned 200 for `/`, `/privacy`, and `/terms` with the documented CSP, one-year HSTS, `nosniff`, referrer policy, permissions policy, and no `X-Powered-By`. No database-backed staging route or mutation was invoked. An interactive browser was unavailable, so this review does not add authenticated, moderator, visual, CSP-console, forwarded-header, or live rollback evidence.
+
+The reviewed code is suitable for a controlled browse-only launch after the parent staging migration-first rollout, final-origin ingress checks, monitoring ownership, and rollback rehearsal. Unrestricted public accounts remain blocked by unfinished privacy/terms decisions, inactive retention automation, Auth0 development social keys, and missing live moderator verification. Account deletion remains deliberately inaccessible and is not counted as a released capability.

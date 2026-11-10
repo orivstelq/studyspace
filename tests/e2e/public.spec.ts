@@ -3,7 +3,6 @@ import { expect, test } from "@playwright/test";
 test("public navigation, search, and listing details", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("A place for every kind of focus");
-    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
 
     await page.getByRole("link", { name: "Explore study spaces" }).click();
     await expect(page).toHaveURL(/\/explore$/);

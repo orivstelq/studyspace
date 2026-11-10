@@ -118,6 +118,28 @@ Auth0 sessions are server-verified, backed by PostgreSQL, non-rolling, and expir
 - Roll back application code by promoting the previous immutable Vercel deployment. Because migrations are forward-only and compatible, do not reverse schema changes as part of that action.
 - For data corruption, stop writes, restore to an isolated database at the chosen timestamp, validate counts and private-data policies, then switch both runtime URLs together. Rotate database credentials after an incident.
 
+## Public v1 migration-first release sequence
+
+This is the canonical order for the current Phase 17 release. `docs/STAGING.md` and `scripts/staging/phase17-rollout.mjs` provide the exact guarded staging commands; no step below authorizes a cloud mutation by itself.
+
+1. **Freeze the artifact.** Record the reviewed commit, require green pull-request CI, and confirm the build contains no account-deletion route or control.
+2. **Verify the target.** From the provider dashboard, record the exact project, branch ID and label, direct non-pooled hostname, database, PostgreSQL major version, and owner login. The branch label `production` in the staging project is only a provider default.
+3. **Confirm recovery.** Record a fresh provider recovery point or snapshot and its usable window. Stop if recovery cannot be independently confirmed.
+4. **Preflight migration history.** Run the rollout guard in check mode with the protected direct owner URL. It must find the reviewed baseline and only the exact Phase 17 migration set pending; any extra, edited, failed, or partially ordered migration is a stop condition.
+5. **Apply database changes first.** Run the guarded migration command once. Reapply `scripts/grant-runtime-roles.sql` as the migration owner, then run `scripts/staging/verify-database-security.sql`. Do not put the owner URL in the Vercel runtime.
+6. **Provision moderators separately.** For each intended moderator, verify the exact Auth0 subject, its current active identity generation, the corresponding random account UUID, and membership in the server-side allowlist. Run the owner-only eligibility and grant commands; never select by email or display name. No moderator is required for a browse-only launch, but reviews/reports must not be enabled without an operational moderator.
+7. **Promote the application.** Deploy the same reviewed commit with pooled public/private runtime URLs, stable server-action and rate-limit secrets, exact Auth0 origins, and bounded pool sizes. Existing sessions remain compatible because the expand migrations preserve legacy columns and dual-write behavior.
+8. **Smoke test.** Verify `/`, `/explore`, a known listing, privacy/terms/contact, 400/404 API behavior, HTTPS/HSTS/CSP, no `X-Powered-By`, signed-out behavior, and rate-limit responses. If accounts are enabled, additionally verify login/logout, two-account Profile/Favorite isolation, review/report flows, moderator denial and approval/rejection, session invalidation, and the exact account menu.
+9. **Observe before widening access.** Check application errors, database connections, rate-limit cleanup, Auth0 failures, and moderation queues. Do not treat one successful request as load or alerting verification.
+
+Application rollback promotes the previous compatible immutable Vercel deployment. Do not reverse the forward-only expand migrations. If the new schema or grants are wrong, stop writes and use the documented forward-recovery path; use provider restoration only for confirmed data corruption and validate it in isolation before cutover.
+
+### Public launch gates
+
+- **Browse-only:** may proceed after the sequence above, final-origin ingress/header verification, monitoring and alert ownership, and a rehearsed deployment rollback. Leave Auth0 variables unset so the UI does not advertise unavailable account features.
+- **Authenticated accounts:** additionally require production Auth0 social credentials, finalized public privacy/terms decisions, an operational retention schedule, a reviewed manual data-request process while self-service deletion is deferred, and live two-account plus moderator testing.
+- **Commercial production:** additionally requires an eligible hosting/database plan, approved backup retention and recovery objectives, a full private-data restore integrity test, and the owner's legal/licensing decisions.
+
 ## Release checklist
 
 1. Choose paid-plan, region, backup retention, recovery objectives, and a custom domain.

@@ -1,8 +1,10 @@
 
 # StudySpace — Security Specification
 
-Status: Draft v0.1
-Classification: Internal engineering documentation
+Status: Public engineering specification; release controls remain under review
+Classification: Public
+
+Private vulnerability reports should follow the repository [security policy](../SECURITY.md). This document describes engineering controls and known limitations; it is not a claim that every external production prerequisite is complete.
 
 ## 1. Security Objectives
 
@@ -193,8 +195,7 @@ the feature requires it and the user consents.
 Do not disclose private user activity through
 public APIs or analytics.
 
-Define and operationally enforce data retention and deletion policies
-before production launch.
+Define and operationally enforce data retention and deletion policies before enabling unrestricted public accounts. A browse-only release may proceed without account creation when authentication is deliberately left unconfigured and the public pages accurately disclose that state.
 
 Phase 16H approves engineering limits for account closure: Profile and Favorites are deleted; application sessions are revoked; approved reviews may remain only after ownership is removed and identifying text is assessed; non-public reviews are deleted except for justified temporary holds; reports are unlinked and removed no later than 90 days after resolution; moderation/security audit records are removed no later than 180 days except for documented limited exceptions; and expired sessions are removed within seven days. Phase 17A implements the local database foundation and transaction tests, but no cloud migration, user workflow, provider deletion, or scheduled retention enforcement is active. The public `/privacy` and `/terms` pages must not promise deletion timing, provider deletion, backup deletion, or perfect anonymization until those operations and backup recovery have been verified. `docs/ACCOUNT_LIFECYCLE.md` is the authoritative implementation and approval design.
 
@@ -273,6 +274,8 @@ until:
 - Known vulnerabilities are reviewed
 - Deployment secrets are configured securely
 - The feature's threat model is updated
+
+For public v1, browse-only traffic and authenticated accounts have separate gates. Public browsing still requires the migration-first rollout, runtime-grant verification, HTTPS/header checks, rate-limit ingress verification, monitoring, and rollback readiness. Authenticated enrollment additionally requires finalized privacy and terms decisions, production social-connection credentials, operational retention cleanup, live two-account verification, and a moderator workflow test. Account deletion UX may remain deferred only while the public privacy page accurately discloses its absence and the operator has a reviewed manual process for data requests.
 
 ## Current implementation notes
 

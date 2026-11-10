@@ -3,6 +3,17 @@ import { describe, expect, it } from "vitest";
 import { LOCAL_PLAYWRIGHT_BASE_URL, resolvePlaywrightBaseUrl } from "../../../playwright-origin";
 
 describe("staging preparation", () => {
+    it("ignores local secrets and authenticated browser state", () => {
+        const gitignore = readFileSync(".gitignore", "utf8");
+
+        for (const pattern of [
+            ".env*", "/playwright/.auth/", "*.pem", "*.key", "*.p12", "*.pfx",
+            "*.storage-state.json",
+        ]) {
+            expect(gitignore).toContain(pattern);
+        }
+    });
+
     it("uses localhost by default and accepts only an explicit HTTPS origin", () => {
         expect(resolvePlaywrightBaseUrl(undefined)).toBe(LOCAL_PLAYWRIGHT_BASE_URL);
         expect(resolvePlaywrightBaseUrl("https://staging.example.test/")).toBe("https://staging.example.test");
