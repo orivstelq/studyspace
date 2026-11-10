@@ -38,6 +38,54 @@ Phase 17C does not add a staging lifecycle login. `studyspace_saved` cannot read
 
 The authorization migration does not infer or backfill moderators: PostgreSQL cannot derive the server-only `AUTH0_MODERATOR_SUBJECTS` allowlist safely. Before deploying the hardened application, an owner-operated procedure must map each approved Auth0 subject through a verified application login to its current active account UUID, then insert exactly that UUID into `ModeratorGrant`. A plain insert must fail if a row already exists; reactivating a revoked grant is a separate reviewed decision. Never accept the UUID from browser form data, and never grant the runtime role table access. Rehearsal must prove that an allowed Auth0 subject without the database grant is denied, a non-allowlisted subject with no grant is denied, the paired allowlist plus grant works, and closing the generation revokes the grant. No such staging grant is created by this repository change.
 
+## Phase 17 controlled rollout
+
+The parent staging branch is the Neon branch named `production` inside project `curly-paper-15884428`; that provider label does not make it a public production environment. Its direct endpoint hostname and branch ID must be copied from the Neon dashboard immediately before release. They are deliberately not guessed or hardcoded. The rollout guard rejects pooled hosts, the disposable rehearsal endpoint and branch ID, any database other than `studyspace_staging`, any user other than `neondb_owner`, PostgreSQL outside major 18, a dirty or unapproved source commit, and any migration history other than the ten reviewed baseline migrations followed by the exact four Phase 17 migrations.
+
+Have the approved secret manager inject `DIRECT_URL`; do not paste it into the command line or a tracked file. Supply these non-secret release assertions in the operator environment:
+
+- `STUDYSPACE_NEON_PROJECT_ID=curly-paper-15884428`
+- `STUDYSPACE_NEON_BRANCH_NAME=production`
+- `STUDYSPACE_NEON_BRANCH_ID` set to the dashboard-confirmed parent branch ID
+- `STUDYSPACE_STAGING_HOST` set to the dashboard-confirmed direct endpoint hostname
+- `STUDYSPACE_APPROVED_COMMIT` set to the full reviewed commit hash
+
+Run the read-only gate first:
+
+```sh
+node scripts/staging/phase17-rollout.mjs check
+```
+
+The command uses Node's system certificate trust with `sslmode=verify-full`, then runs the existing read-only owner/role preflight through libpq with `PGSSLMODE=verify-full` and `PGSSLROOTCERT=system`. It never passes the connection URL or password as a command argument and redacts either value from child-process output. `PASS` for project and branch metadata means the operator-supplied dashboard values matched the reviewed constants and endpoint; PostgreSQL cannot independently attest Neon project or branch labels.
+
+Immediately before mutation, confirm in Neon that the parent branch still has a usable recovery point and record a UTC timestamp no more than 30 minutes old. After explicit owner approval, set `STUDYSPACE_ROLLOUT_APPROVED=yes` and `STUDYSPACE_RECOVERY_CONFIRMED_AT` to that timestamp, then run:
+
+```sh
+node scripts/staging/phase17-rollout.mjs apply
+```
+
+`apply` repeats every read-only gate, applies the four migrations through `prisma migrate deploy`, reapplies `grant-runtime-roles.sql`, runs the full database security verifier, and requires all 14 names and checksums afterward. It stops before application deployment. The security verifier also requires the legacy ownership columns and five dual-write triggers needed by the currently deployed application and code rollback. If an interruption occurs after one or more reviewed Phase 17 migrations commit, `apply` accepts only that exact checksum-valid migration prefix and resumes the remaining suffix; it can also safely reapply grants and verification after all 14 migrations. A failed migration row or any non-prefix history still stops the command. The old application remains in service while the operator repairs forward. Never reverse or edit an applied migration.
+
+### Owner-only moderator grant
+
+Moderator provisioning is separate from migration rollout and is never performed by `apply`. First have the intended dedicated staging account sign in successfully. Obtain its exact Auth0 subject from the verified Auth0 account/session record and its active StudySpace account UUID from the subject-derived account mapping; never select by email, display name, or a browser-supplied UUID. Confirm the exact subject is present in the staging server's `AUTH0_MODERATOR_SUBJECTS` value.
+
+With the same protected direct-owner connection and release metadata, inject the exact staging values as `AUTH0_DOMAIN`, `AUTH0_MODERATOR_SUBJECTS`, `STUDYSPACE_MODERATOR_SUBJECT`, and `STUDYSPACE_MODERATOR_ACCOUNT_ID`. Set `STUDYSPACE_MODERATOR_SUBJECT_VERIFIED=yes` only after comparing the subject with Auth0. Run the read-only eligibility check:
+
+```sh
+node scripts/staging/phase17-rollout.mjs moderator-check
+```
+
+The check derives the same issuer/subject digest as the application, requires the explicit account UUID to match the active, unlinked, latest identity generation, confirms the subject is in the supplied exact allowlist, and fails if any grant already exists. It does not prove that the supplied allowlist matches Vercel; retain a redacted dashboard comparison as release evidence.
+
+After a separate grant approval, set `STUDYSPACE_MODERATOR_GRANT_APPROVED=yes` and a fresh `STUDYSPACE_MODERATOR_GRANT_CONFIRMED_AT` UTC timestamp, then deliberately run:
+
+```sh
+node scripts/staging/phase17-rollout.mjs moderator-grant
+```
+
+The command repeats every check under a transaction and account row lock, inserts one `ModeratorGrant`, and fails on a concurrent, active, or revoked existing row. It never reactivates or revokes a grant. After application deployment, verify one allowlisted moderator and one non-moderator through the actual staging application; database eligibility alone is not live Auth0 authorization evidence.
+
 ## Exact provisioning sequence
 
 Treat the sequence below as the reviewed procedure for a new environment; the existing staging database has already completed the database steps. Every future mutation requires explicit approval and credentials supplied through the operator's local environment. Never paste a credential or URL into a command transcript, issue, or pull request. Run one step at a time and retain redacted output as release evidence.
@@ -124,6 +172,10 @@ Configure these directly in the staging project's encrypted settings. Do not use
 The two runtime URLs use Neon pooled endpoints. Each warm Vercel instance can open both application pools, so the approximate application ceiling is `(DATABASE_POOL_MAX + PRIVATE_DATABASE_POOL_MAX) × concurrent instances`; validate queueing and connections under live staging load. The direct endpoint is reserved for migrations and short administrative checks. Neon can support Prisma migrations through its current pooler, but a direct owner endpoint keeps ownership and long-running DDL separate from runtime traffic.
 
 Run migrations once before promoting application code. Migrations are forward-only and must be backward compatible. Roll back application code by promoting the prior immutable Vercel deployment with the same Server Action encryption key. Never automatically reverse a schema migration. For data recovery, restore to an isolated Neon branch/project, validate counts and security policies, and change both runtime URLs together only after approval.
+
+For Phase 17, run the controlled database rollout above while the old deployment remains live, provision any approved moderator grant separately, and only then build and promote the reviewed application commit. Confirm the Vercel application environment has pooled public/private runtime URLs, the exact staging Auth0 configuration, the stable Server Action key, rate-limit secret, and trusted-ingress setting; it must not contain `DIRECT_URL`, `MAINTENANCE_DATABASE_URL`, or a lifecycle-owner credential. Smoke-test existing sessions plus fresh login, Saved, Profile, reviews, private reports, moderator/non-moderator behavior, and logout. There is no account-closure route, action, or control in this release.
+
+If the new application fails, promote the prior immutable Vercel deployment without reversing the expand migrations. The legacy owner columns, raw-setting compatibility policies, and dual-write triggers keep that code path available. Do not run a contract migration during this rollback window. Database recovery is a separate incident operation: stop writes, restore to an isolated branch, validate data and RLS, and obtain approval before changing runtime URLs.
 
 Before production release, choose and record backup retention, recovery-point objective, and recovery-time objective. A staging manual snapshot was restored into a separate branch on 2026-11-08, both published library listings were verified, and the branch was deleted; this did not verify full database integrity or application cutover. Recovery history is currently limited to six hours, and scheduled snapshots are unavailable on the current Neon plan.
 

@@ -54,6 +54,8 @@ psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f scripts/grant-runtime-roles.sql
 
 The grant script must run as the same owner that creates tables. Migrations must be backward-compatible with the currently deployed application: expand first, deploy compatible code, backfill separately, then contract in a later release. Never run migrations concurrently from application instances or automatically undo a migration during application rollback.
 
+The Phase 17 staging release uses the stricter guarded procedure in `docs/STAGING.md` and `scripts/staging/phase17-rollout.mjs`. That procedure verifies the exact reviewed pending set and recovery attestation, applies migrations before code, reapplies grants, and stops before Vercel promotion. It is environment-specific staging tooling, not a general production deployment command.
+
 ## Shared rate limits
 
 `RateLimitBucket` provides atomic fixed-window counters through the private runtime connection, so limits apply across all application instances. Raw account identifiers and client addresses are not stored; keys are scoped HMAC digests. Current limits are:

@@ -117,6 +117,43 @@ BEGIN
         RAISE EXCEPTION 'expected runtime-owned private tables to use RLS without FORCE RLS';
     END IF;
 
+    SELECT count(*) INTO bad_count
+    FROM (VALUES
+        ('Favorite', 'ownerKey'),
+        ('UserProfile', 'ownerKey'),
+        ('Review', 'ownerKey'),
+        ('UserReport', 'reporterKey'),
+        ('ModerationAction', 'moderatorKey')
+    ) AS legacy(table_name, column_name)
+    LEFT JOIN pg_catalog.pg_attribute attribute
+      ON attribute.attrelid = pg_catalog.to_regclass(pg_catalog.format('public.%I', legacy.table_name))
+     AND attribute.attname = legacy.column_name
+     AND attribute.attnum > 0
+     AND NOT attribute.attisdropped
+    WHERE attribute.attnum IS NULL;
+
+    IF bad_count <> 0 THEN
+        RAISE EXCEPTION 'legacy ownership columns required for application rollback are missing';
+    END IF;
+
+    SELECT count(*) INTO bad_count
+    FROM (VALUES
+        ('Favorite', 'Favorite_account_compatibility'),
+        ('UserProfile', 'UserProfile_account_compatibility'),
+        ('Review', 'Review_account_compatibility'),
+        ('UserReport', 'UserReport_account_compatibility'),
+        ('ModerationAction', 'ModerationAction_account_compatibility')
+    ) AS expected(table_name, trigger_name)
+    LEFT JOIN pg_catalog.pg_trigger trigger
+      ON trigger.tgrelid = pg_catalog.to_regclass(pg_catalog.format('public.%I', expected.table_name))
+     AND trigger.tgname = expected.trigger_name
+     AND NOT trigger.tgisinternal
+    WHERE trigger.oid IS NULL;
+
+    IF bad_count <> 0 THEN
+        RAISE EXCEPTION 'legacy dual-write triggers required for application rollback are missing';
+    END IF;
+
     IF EXISTS (
         SELECT 1
         FROM pg_catalog.pg_namespace namespace,

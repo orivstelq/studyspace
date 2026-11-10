@@ -176,4 +176,31 @@ describe("staging preparation", () => {
             expect(grants).toContain(`"${column}"`);
         }
     });
+
+    it("keeps the Phase 17 rollout migration-first, credential-safe, and separate from moderator grants", () => {
+        const rollout = readFileSync("scripts/staging/phase17-rollout.mjs", "utf8");
+        const verify = readFileSync("scripts/staging/verify-database-security.sql", "utf8");
+        expect(rollout).not.toContain('import "dotenv/config"');
+        expect(rollout).toContain('"20261110170000_harden_account_context_authorization"');
+        expect(rollout).toContain('directUrl.searchParams.set("sslmode", "verify-full")');
+        expect(rollout).toContain('PGSSLROOTCERT: "system"');
+        expect(rollout).toContain('PGSSLMODE: "verify-full"');
+        expect(rollout).toContain('configuration.directUrl.password');
+        expect(rollout).toContain('"prisma", "migrate", "deploy"');
+        expect(rollout.indexOf('"prisma", "migrate", "deploy"')).toBeLessThan(
+            rollout.indexOf('"--file=scripts/grant-runtime-roles.sql"'),
+        );
+        expect(rollout.indexOf('"--file=scripts/grant-runtime-roles.sql"')).toBeLessThan(
+            rollout.indexOf('"--file=scripts/staging/verify-database-security.sql"'),
+        );
+        expect(rollout.indexOf("if (command.startsWith(\"moderator-\"))")).toBeLessThan(
+            rollout.indexOf('"prisma", "migrate", "deploy"'),
+        );
+        expect(rollout).toContain('STUDYSPACE_MODERATOR_SUBJECT_VERIFIED');
+        expect(rollout).toContain('account."state" = \'ACTIVE\'');
+        expect(rollout).toContain('identity."unlinkedAt" IS NULL');
+        expect(rollout).not.toContain("console.log(configuration.directUrl");
+        expect(verify).toContain("legacy ownership columns required for application rollback are missing");
+        expect(verify).toContain("legacy dual-write triggers required for application rollback are missing");
+    });
 });

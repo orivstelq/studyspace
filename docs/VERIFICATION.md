@@ -101,6 +101,14 @@ Static checks and recorded disposable-Neon evidence verify migration/grant prese
 
 The recorded disposable Neon branch rehearsal used branch `rehearsal-account-lifecycle` (`br-cold-king-beer2yusy`), database `studyspace_staging`. All 14 migrations and runtime grants were previously applied there; public/Saved permissions, two-account isolation, legacy mappings, verified-context policies, legacy-compatibility policies, no-grant moderator denial, and denial of the retired context function passed. Live Auth0 reauthentication/provider deletion, a deployed lifecycle credential, retention scheduling, backup replay, a real moderator workflow, full baseline-application execution, and the future contract migration remain unverified and unapproved.
 
+## 2026-11-10 — Phase 17 staging-rollout preparation
+
+Release preparation added a fail-closed local rollout guard without connecting to Neon or Vercel. Its unit coverage verifies the exact project/branch assertions, direct non-pooled owner endpoint, database, TLS mode, approved commit, fresh recovery attestation, ten-migration baseline, four-migration Phase 17 set, checksum/completion enforcement, and safe resume from only a committed prefix of that set. The runtime database security verifier now also requires every legacy owner column and dual-write trigger needed by the deployed application and code rollback. Moderator eligibility/grant commands remain separately and deliberately invoked; migration rollout never grants moderator access.
+
+Local verification passed 122 unit tests and 33 PostgreSQL integration tests using only the explicitly selected `studyspace_test_recovery` database. ESLint, TypeScript, Prisma validation, rollout-script syntax, and the webpack production build passed. The build retained the previously recorded Auth0 SDK dynamic-dependency warnings. No existing migration was edited, no account-deletion route or control was added, and no cloud database, Auth0, Vercel, secret, or local `.env` file was changed or printed by the rollout preparation.
+
+The guard itself has not been executed against the parent Neon branch. Parent project/branch labels and recovery availability require dashboard evidence because PostgreSQL cannot attest those provider-level facts. Migration application, moderator provisioning, Vercel promotion, authenticated smoke tests, and rollback execution remain `NOT RUN` pending explicit external approval.
+
 The full live-cloud evidence requirements are tracked in `docs/STAGING_CHECKLIST.md`. The 2026-11-08 evidence below supersedes the earlier `NOT RUN` statements only for the specific checks it completed; Neon catalog/RLS validation, the public HTTPS verifier, Vercel forwarded-header behavior, authenticated Playwright, moderator workflows, connection load, monitoring, alerting, full restore integrity, and executed rollback remain incomplete.
 
 ## Staging live verification

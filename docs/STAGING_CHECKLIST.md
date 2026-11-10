@@ -93,4 +93,16 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 | NOT RUN | Incident access | Named operator can revoke/rotate each login and Auth0/Vercel secret without code change |
 | NOT RUN | Deployment approval | Explicit owner approval references the tested commit and unresolved accepted risks |
 
+## Phase 17 parent-staging rollout gate
+
+| Status | Gate | Required evidence |
+| --- | --- | --- |
+| NOT RUN | Parent identity | Neon dashboard evidence for project `curly-paper-15884428`, branch name `production`, its non-rehearsal branch ID, exact direct hostname, database `studyspace_staging`, and PostgreSQL 18 |
+| NOT RUN | Fresh recovery point | Provider evidence captured within 30 minutes of migration, plus the operator timestamp supplied to the rollout guard |
+| NOT RUN | Read-only rollout check | `phase17-rollout.mjs check` produces only PASS results for the approved clean commit, owner connection, roles, and exact ten-applied/four-pending history |
+| NOT RUN | Migration-first rollout | `phase17-rollout.mjs apply` records all 14 checksums, grants, RLS/security checks, legacy columns, and compatibility triggers before any Vercel promotion |
+| NOT RUN | Moderator provisioning | Exact Auth0 subject and active generation verified; supplied allowlist compared with Vercel; deliberate owner grant recorded without email/display-name inference |
+| NOT RUN | Application smoke | Existing and fresh sessions, Profile, Favorites, reviews, reports, moderator/non-moderator access, logout, and absence of account-deletion UI verified after promotion |
+| NOT RUN | Rollback readiness | Prior immutable deployment and stable Server Action key confirmed; no contract migration; rollback does not reverse the expand migrations |
+
 Do not merge a failed or blocked gate into a claim of successful staging verification. Record local, CI, staging-cloud, and manual results separately in `docs/VERIFICATION.md`.
