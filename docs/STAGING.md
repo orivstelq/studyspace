@@ -1,6 +1,6 @@
 # Staging deployment preparation
 
-Status: the isolated staging application is deployed from commit `70e2bf4`, and Vercel reports it Ready. The previously recorded database migrations, grants, and scheduled cleanup are provisioned. The Phase 17 expand chain was rehearsed on disposable PostgreSQL 18 and Neon environments, but it has not been applied to the parent staging branch and still requires explicit deployment approval. It retains legacy ownership columns for rollback compatibility; the destructive contract migration is intentionally deferred. Verified evidence and incomplete release gates are recorded in `docs/VERIFICATION.md` and `docs/STAGING_CHECKLIST.md`; staging readiness does not imply commercial production readiness.
+Status: the isolated staging application is deployed from commit `70e2bf4`, and Vercel reports it Ready. On 2026-11-10, the five Phase 17 expand migrations were applied to the parent staging database; all 15 migration checksums, runtime grants, RLS, and database security checks passed. The application release commit `b32c4ab5866d15fd01aeec344464ea8846c957bf` has not been promoted. The expand schema retains legacy ownership columns for application rollback; the destructive contract migration is intentionally deferred. Verified evidence and incomplete release gates are recorded in `docs/VERIFICATION.md` and `docs/STAGING_CHECKLIST.md`; staging readiness does not imply commercial production readiness.
 
 ## Fixed environment boundary
 
@@ -66,7 +66,7 @@ node scripts/staging/phase17-rollout.mjs apply
 
 `apply` repeats every read-only gate, applies the five migrations through `prisma migrate deploy`, reapplies `grant-runtime-roles.sql`, runs the full database security verifier, and requires all 15 names and checksums afterward. It stops before application deployment. The security verifier also requires the legacy ownership columns and five dual-write triggers needed by the currently deployed application and code rollback. If an interruption occurs after one or more reviewed Phase 17 migrations commit, `apply` accepts only that exact checksum-valid migration prefix and resumes the remaining suffix; it can also safely reapply grants and verification after all 15 migrations. A failed migration row or any non-prefix history still stops the command. The old application remains in service while the operator repairs forward. Never reverse or edit an applied migration.
 
-The first four Phase 17 migrations were rehearsed on the disposable Neon branch. The fifth migration adds only the bounded maintenance function and grants, but it must receive its own disposable Neon PostgreSQL 18 rehearsal before parent staging approval.
+The disposable rehearsal instructions below are retained for reproducibility and future migration work. They are no longer a pending prerequisite for the completed parent staging rollout.
 
 ### Disposable retention-migration rehearsal
 
@@ -178,7 +178,7 @@ Configure these directly in the staging project's encrypted settings. Do not use
 | `PRIVATE_DATABASE_POOL_MAX` | Start at 2 per instance; tune from Neon metrics |
 | `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET` | Dedicated staging Auth0 application only |
 | `AUTH0_SECRET` | Independent staging session secret, 32 bytes or longer |
-| `AUTH0_MODERATOR_SUBJECTS` | Exact dedicated staging test subjects only |
+| `AUTH0_MODERATOR_SUBJECTS` | Keep absent until a moderator is independently verified; then use exact dedicated staging subjects only |
 | `RATE_LIMIT_SECRET` | Independent staging HMAC secret, 32 bytes or longer |
 | `TRUSTED_CLIENT_IP_SOURCE` | `vercel`, only after deployed ingress verification |
 | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | Stable staging value shared across builds/instances and rollback |
@@ -223,7 +223,7 @@ The verifier rejects non-HTTPS origins and credential-bearing URLs, sends no coo
 
 ## Known live-cloud gates
 
-- PostgreSQL 18.6 on the actual Neon compute, including all migrations, role membership flags, owner checks, RLS denials, review immutability, moderator setting isolation, and bounded cleanup
+- Application smoke coverage against the migrated parent database, including existing sessions, private account flows, and moderator/non-moderator behavior
 - Vercel's actual `x-vercel-forwarded-for` overwrite behavior under conflicting browser-supplied forwarding headers
 - HTTPS redirect, HSTS, CSP console behavior, cookie flags, callbacks, logout, and back-channel invalidation on the final staging domain
 - Connection-pool behavior under concurrency and cold starts
@@ -231,6 +231,6 @@ The verifier rejects non-HTTPS origins and credential-bearing URLs, sends no coo
 - Monitoring and alerts; the approved cleanup schedule has one successful recorded run
 - The live three-session Playwright suite, moderator approval/rejection, and a manual keyboard/mobile pass
 - An executed Vercel rollback; deployment `b508b79` is Ready and Instant Rollback is available, but neither was exercised
-- Resolution of the Vercel Node.js version override warning and Auth0 development-key warning
+- Resolution of the Auth0 development-key warning
 
 The CSP intentionally retains `script-src 'unsafe-inline'` and inline styles for the current Next.js Cache Components/partial-prerendering architecture. It blocks external script sources and inline event attributes, but it is not nonce-level protection and cannot stop every inline-script injection. That residual risk remains a production gate.

@@ -6,7 +6,7 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 
 | Evidence | Recorded result | Scope limitation |
 | --- | --- | --- |
-| Vercel deployment | Commit `70e2bf4` is deployed to staging with status Ready. | The Vercel Node.js version override warning remains unresolved. |
+| Vercel deployment | Commit `70e2bf4` is deployed to staging with status Ready; the project is configured for Node.js 24.x. | The Phase 17 release commit has not been promoted. |
 | Manual Auth0/application exercise | Login, logout, separate accounts, Profile preferences, public directory, Favorites, review submission and withdrawal, and report submission worked through the staging UI. | Manual evidence only; authenticated Playwright and moderator approval/rejection were not run. |
 | Cross-account isolation | Profile and Favorites stayed isolated between two accounts, and the second account could not see the first account's pending review. | This does not replace the remaining direct RLS, mutation-denial, or moderator tests. |
 | Scheduled cleanup | GitHub Actions run `42527692806` succeeded and deleted `0` expired buckets from a maximum batch of `1,000`. | One successful empty batch does not demonstrate backlog alerting under load. |
@@ -26,7 +26,7 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 
 | Evidence | Recorded result | Scope limitation |
 | --- | --- | --- |
-| Reachable-history scan | All 52 reachable commits and 872 reachable objects were checked for private-key markers, common provider-token formats, JWT-shaped values, credential-bearing PostgreSQL URLs, environment files, logs, screenshots, and Playwright state. Matches were limited to documented placeholders, CI-only local credentials, environment-variable references, the approved public contact, and documented infrastructure metadata. | Pattern scanning cannot prove that an arbitrary unstructured secret is absent. GitHub author metadata includes the owner's full name, which requires owner acceptance before visibility changes. |
+| Reachable-history scan | On 2026-11-10, 56 reachable commits, 971 named objects, and 916 unique blobs were checked for private-key markers, common provider-token formats, JWT-shaped values, credential-bearing PostgreSQL URLs, environment files, logs, screenshots, Playwright state, and unnecessary tool attribution. Matches were limited to documented placeholders, CI-only local credentials, the approved public contact, and documented infrastructure metadata. | Pattern scanning cannot prove that an arbitrary unstructured secret is absent. GitHub author metadata and the MIT license include the owner's full name, which is legitimate attribution and requires owner acceptance before visibility changes. |
 | Public staging headers | Read-only HTTPS HEAD requests to `/`, `/privacy`, and `/terms` returned 200 with one-year HSTS, the documented CSP, `nosniff`, referrer policy, permissions policy, and no `X-Powered-By`. | This did not query database-backed routes, test CSP violations in a browser, verify HTTP-to-HTTPS redirect, or test forwarded-header trust. |
 | Local release gates | 128 unit tests, 34 PostgreSQL integration tests against `studyspace_test_recovery`, ESLint, TypeScript, Prisma validation, webpack production build, four public Playwright tests, and `npm audit` passed. | The local Turbopack worker could not bind its helper port; authenticated/moderator Playwright and the new lifecycle cleanup remain live-cloud gates. GitHub CI must rerun for the final commit. |
 
@@ -43,15 +43,15 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 
 | Status | Gate | Required evidence |
 | --- | --- | --- |
-| NOT RUN | Environment identity | Redacted console capture: project `curly-paper-15884428`, AWS US East 2, database `studyspace_staging`, PostgreSQL 18.6 |
+| PASS | Environment identity | 2026-11-10 parent rollout guard verified project `curly-paper-15884428`, the non-rehearsal parent branch, database `studyspace_staging`, owner role, TLS, and PostgreSQL 18.6 |
 | NOT RUN | Backup policy | Recorded retention, RPO, RTO, and successful isolated restore rehearsal |
-| NOT RUN | Preflight | Redacted `scripts/staging/preflight.sql` output with expected DB/version/permission attributes |
-| NOT RUN | Login identities | Catalog output showing three fixed login roles with no elevated attributes; provisioning transcript excludes secrets and records Neon's plaintext-over-TLS requirement |
-| NOT RUN | Membership | `INHERIT TRUE`, `SET FALSE`, `ADMIN FALSE`, exactly one permission role per login |
-| NOT RUN | Ownership | All application objects owned by `neondb_owner`; no runtime/permission role owns objects |
-| NOT RUN | Migrations | `prisma migrate status` and `_prisma_migrations` show every committed migration exactly once |
-| NOT RUN | Grants/defaults | Public database/schema access revoked; temporary future table is private until explicitly granted |
-| NOT RUN | Public denial | Application login cannot read private account, report, moderation, session, or rate-limit tables |
+| PASS | Preflight | 2026-11-10 parent rollout preflight passed the expected database, version, role, and permission checks |
+| PASS | Login identities | 2026-11-10 security verification passed for the three constrained staging login roles; no credentials were recorded |
+| PASS | Membership | 2026-11-10 security verification passed `INHERIT TRUE`, `SET FALSE`, `ADMIN FALSE`, with one expected permission role per login |
+| PASS | Ownership | 2026-11-10 security verification found application objects owned by `neondb_owner`, not runtime roles |
+| PASS | Migrations | 2026-11-10 all 15 committed migration names and checksums passed after the parent rollout |
+| PASS | Grants/defaults | 2026-11-10 runtime grants, default privileges, schema restrictions, and RLS checks passed |
+| PASS | Public denial | 2026-11-10 security verification confirmed the public role cannot read private account, report, moderation, session, or rate-limit tables |
 | NOT RUN | Owner isolation | Two distinct verified owner contexts cannot read or mutate each other's Favorite/Profile/Review data |
 | NOT RUN | Live Favorite RLS probe | Reviewed wrapper fixing libpq `verify-full` with system certificate trust, plus output for restricted-login isolation, rollback, and exact fixture cleanup |
 | NOT RUN | Review integrity | Rating/body edit succeeds; owner/listing reassignment fails; approved edit becomes pending/private |
@@ -66,8 +66,8 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 | Status | Gate | Required evidence |
 | --- | --- | --- |
 | NOT RUN | Isolation | Dedicated staging project/domain; no production or local secret reused; previews cannot reach staging data by default |
-| NOT RUN | Runtime | Node.js 24, Next.js production server, region aligned with Neon US East 2 |
-| NOT RUN | Environment | Required variables present in the intended environment; owner/maintenance URLs absent from runtime |
+| PASS | Runtime | 2026-11-10 authenticated Vercel project inspection confirmed Node.js 24.x and the Next.js preset |
+| BLOCKED | Environment | Exactly 12 expected variables are Production-only; Preview has none; `DIRECT_URL`, `MAINTENANCE_DATABASE_URL`, and `AUTH0_MODERATOR_SUBJECTS` are absent. Eleven values are Vercel Secrets and cannot be retrieved after creation, so their exact values and stability remain unverified. |
 | NOT RUN | HTTPS | HTTP redirects to HTTPS; certificate is valid; HSTS is one year with `includeSubDomains` |
 | NOT RUN | Headers | `npm run verify:staging` transcript plus browser network capture |
 | NOT RUN | CSP | No required resource violation; `unsafe-inline` residual risk explicitly accepted, not called nonce protection |
@@ -108,10 +108,10 @@ Status values are `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`. A release requires a 
 
 | Status | Gate | Required evidence |
 | --- | --- | --- |
-| NOT RUN | Parent identity | Neon dashboard evidence for project `curly-paper-15884428`, branch name `production`, its non-rehearsal branch ID, exact direct hostname, database `studyspace_staging`, and PostgreSQL 18 |
+| PASS | Parent identity | 2026-11-10 guarded rollout verified the intended parent branch, direct endpoint, `studyspace_staging`, owner role, TLS, and PostgreSQL 18.6 |
 | NOT RUN | Fresh recovery point | Provider evidence captured within 30 minutes of migration, plus the operator timestamp supplied to the rollout guard |
-| NOT RUN | Read-only rollout check | `phase17-rollout.mjs check` produces only PASS results for the approved clean commit, owner connection, roles, and exact ten-applied/five-pending history |
-| NOT RUN | Migration-first rollout | `phase17-rollout.mjs apply` records all 15 checksums, grants, cleanup-function privileges, RLS/security checks, legacy columns, and compatibility triggers before any Vercel promotion |
+| PASS | Read-only rollout check | 2026-11-10 `phase17-rollout.mjs check` passed for the approved clean commit, owner connection, roles, and exact ten-applied/five-pending history |
+| PASS | Migration-first rollout | 2026-11-10 all five Phase 17 migrations were applied before application promotion; all 15 checksums, grants, RLS/security checks, legacy columns, and compatibility triggers passed |
 | NOT RUN | Moderator provisioning | Exact Auth0 subject and active generation verified; supplied allowlist compared with Vercel; deliberate owner grant recorded without email/display-name inference |
 | NOT RUN | Application smoke | Existing and fresh sessions, Profile, Favorites, reviews, reports, moderator/non-moderator access, logout, and absence of account-deletion UI verified after promotion |
 | NOT RUN | Rollback readiness | Prior immutable deployment and stable Server Action key confirmed; no contract migration; rollback does not reverse the expand migrations |

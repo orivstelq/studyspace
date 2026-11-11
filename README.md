@@ -8,7 +8,7 @@ StudySpace is a full-stack directory for finding study-friendly places. It combi
 
 ## Project status
 
-StudySpace is an independently operated portfolio project preparing for its first public release. Public browsing is suitable for a limited launch after the documented staging migration and smoke checks. Public account enrollment remains gated on owner/legal review of the provisional US age-18 audience, operational retention enforcement, production Auth0 social credentials, and live two-account and moderator testing.
+StudySpace is an independently operated portfolio project preparing for its first public release. The staging database migration is complete; public browsing is suitable for a limited launch after the remaining live smoke checks. Public account enrollment remains gated on owner/legal review of the provisional US age-18 audience, operational retention enforcement, production Auth0 social credentials, and live two-account and moderator testing.
 
 Account-wide deletion is not currently offered and is not advertised as a released feature. The database foundation and remaining approval gates are documented in [Account lifecycle](docs/ACCOUNT_LIFECYCLE.md).
 

@@ -4,7 +4,7 @@ Status: Phase 17 database foundation implemented and rehearsed; no user-facing o
 
 Public support and privacy contact: [sidstelq11@gmail.com](mailto:sidstelq11@gmail.com).
 
-The Phase 17 expand migrations, authorization hardening, owner-only repository operations, and bounded retention-cleanup function implement the database foundation. The first four expand migrations were exercised against isolated local PostgreSQL 17 and 18 databases and a disposable Neon PostgreSQL 18 branch; the additive cleanup migration has local PostgreSQL coverage but still needs a disposable Neon rehearsal. None has been applied to the parent staging branch. There is still no account-deletion route, button, dedicated lifecycle login, Auth0 Management API integration, provider-completion worker, or deployed lifecycle cleanup schedule. The approved dispositions below remain engineering requirements, not a public claim that deletion is available.
+The Phase 17 expand migrations, authorization hardening, owner-only repository operations, and bounded retention-cleanup function implement the database foundation. The five expand migrations are applied to the parent staging database, where all 15 migration checksums, runtime grants, RLS, and database security checks passed on 2026-11-10. There is still no account-deletion route, button, dedicated lifecycle login, Auth0 Management API integration, provider-completion worker, or active lifecycle cleanup schedule. The approved dispositions below remain engineering requirements, not a public claim that deletion is available.
 
 ## Current identity and data boundary
 
@@ -96,9 +96,9 @@ The future self-service operation must use a POST Server Action or route with th
 
 Idempotency must be database-enforced by one closure request per account generation. A repeated request returns the existing state and cannot target another account. Recovery for a person who cannot authenticate is a separate operator-reviewed process and is not authorized by possession of an email address alone.
 
-## Expand/migrate/contract rollout — implemented locally through expand, cloud approval required
+## Expand/migrate/contract rollout — expand deployed to staging
 
-The unpublished Phase 17 migrations are an **expand** release. They retain the deployed `ownerKey`, `reporterKey`, and `moderatorKey` columns, backfill random account IDs, and install compatibility triggers that validate and dual-write both representations. The old application can therefore continue reading and writing while migrations run, and the new application can use account IDs after all migrations and runtime grants succeed. The authorization hardening migration adds private `ModeratorGrant` records, replaces the runtime-callable UUID/boolean context function with account/digest verification, and requires the database grant in addition to the Auth0 allowlist. The public role still receives only the six approved Review columns.
+The Phase 17 migrations are an **expand** release. They retain the deployed `ownerKey`, `reporterKey`, and `moderatorKey` columns, backfill random account IDs, and install compatibility triggers that validate and dual-write both representations. The old application can therefore continue reading and writing after the database rollout, and the new application can use account IDs after all migrations and runtime grants succeed. The authorization hardening migration adds private `ModeratorGrant` records, replaces the runtime-callable UUID/boolean context function with account/digest verification, and requires the database grant in addition to the Auth0 allowlist. The public role still receives only the six approved Review columns.
 
 Required order:
 
@@ -129,7 +129,7 @@ The local migration implements the reviewed random account-generation design:
 9. Preserve the public role's column-level Review grants for only `id`, `studySpaceId`, `rating`, `body`, `status`, and `publishedAt`, while RLS continues to enforce approved-row visibility. Test denial of actor, lifecycle, assessment, and internal timestamp columns directly with the runtime login.
 10. Update default privileges and staging catalog verification so the new tables and function are denied to public/runtime roles except for the exact grants reviewed above.
 
-This design resolves re-registration and collision risks better than replacing keys with a shared tombstone. The expand chain preserved populated synthetic legacy data in disposable PostgreSQL 18 and Neon rehearsals. Applying it to the parent staging branch or any production environment still requires backup/recovery review, exact pending-migration checks, and explicit owner approval.
+This design resolves re-registration and collision risks better than replacing keys with a shared tombstone. The expand chain preserved populated synthetic legacy data in disposable PostgreSQL 18 and Neon rehearsals. It is applied to the parent staging branch; any production rollout still requires backup/recovery review, exact pending-migration checks, and explicit owner approval.
 
 ## Re-registration, linked identities, moderators, and holds
 
@@ -152,13 +152,13 @@ Before any public deletion promise:
 
 Until those checks pass, `/privacy` must not promise a completion time, perfect anonymization, provider deletion, or deletion from backups.
 
-## Cleanup schedule and monitoring — implemented, not deployed
+## Cleanup schedule and monitoring — database foundation deployed, schedule pending
 
 Migration `20261110190000_add_lifecycle_retention_cleanup` adds a fixed-search-path security-definer function for expired sessions, resolved reports, and moderation actions. The existing hourly maintenance workflow invokes it and rate-limit cleanup in one transaction after verifying the exact restricted staging login. Each invocation deletes at most 1,000 rows per category using `FOR UPDATE SKIP LOCKED`. Expired sessions are eligible immediately, ordinary resolved reports at 89 days, and ordinary audits at 179 days; the one-day buffer allows missed or full-batch runs without intentionally crossing the seven-, 90-, or 180-day maximum. Active, finite audit holds block audit deletion until expiry.
 
 The maintenance identity has function execution only, not table reads/deletes or account-closure execution. Workflow failures and full batches are visible in GitHub Actions. Alerts for missed runs, oldest eligible row age, invalid holds, and rows past deadline still require external monitoring. Cleanup of expired review holds and non-public review evidence remains tied to the reviewed account-closure/hold workflow rather than this generic job.
 
-The code and schedule do not become active until the migration and grants are deployed and the workflow exists on the deployed default branch with its restricted secret. That external activation requires approval.
+The migration and grants are deployed to parent staging. Lifecycle cleanup does not become active until the combined workflow exists on the deployed default branch with its restricted secret and its first bounded run is reviewed. That external activation requires approval.
 
 ## Required verification and remaining approval gates
 
@@ -176,4 +176,4 @@ Before the workflow can be enabled, tests must prove:
 - moderator allowlist revocation and linked-identity handling work with real Auth0 accounts;
 - a full isolated backup restore re-applies completed closures before serving traffic.
 
-Explicit approval is still required to rehearse the cleanup migration on disposable Neon, apply migrations to the parent staging branch or production, activate the maintenance schedule, create the dedicated lifecycle identity and grants, expose a reauthenticated confirmation flow, add Auth0 Management API access and a retryable provider outbox, verify linked identities and moderator revocation, approve backup/recovery behavior and public policy wording, and perform any first live deletion. The reviewed manual intake and verification procedure is in `docs/DATA_REQUESTS.md`; its export, provider completion, case-retention, and end-to-end gates remain incomplete. No staging or production deletion should be attempted before those gates are satisfied.
+Explicit approval is still required to apply the expand migrations to production, activate the lifecycle maintenance schedule, create the dedicated lifecycle identity and grants, expose a reauthenticated confirmation flow, add Auth0 Management API access and a retryable provider outbox, verify linked identities and moderator revocation, approve backup/recovery behavior and public policy wording, and perform any first live deletion. The reviewed manual intake and verification procedure is in `docs/DATA_REQUESTS.md`; its export, provider completion, case-retention, and end-to-end gates remain incomplete. No staging or production deletion should be attempted before those gates are satisfied.
