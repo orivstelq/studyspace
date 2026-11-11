@@ -4,7 +4,9 @@ import { getAuthClient, getAuthIdentity } from "@/lib/auth/auth";
 
 export async function AccountMenu() {
     await connection();
-    const identity = getAuthClient() ? await getAuthIdentity() : null;
+    if (!getAuthClient()) return null;
+
+    const identity = await getAuthIdentity();
 
     if (!identity) {
         return <a href="/auth/login" className="inline-flex min-h-11 items-center rounded-lg border border-harbor px-3 py-2 text-sm font-semibold text-harbor hover:bg-linen">Sign in</a>;

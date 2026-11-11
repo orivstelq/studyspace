@@ -23,7 +23,7 @@ export async function updateReview(_previousMessage: string | null, form: FormDa
     const slug = form.get("slug");
     try {
         if (intent === "withdraw" && validSlug(slug)) {
-            if (!await withdrawOwnReview(privateDatabase(), identity.ownerKey, slug)) return "This review could not be withdrawn.";
+            if (!await withdrawOwnReview(privateDatabase(), identity, slug)) return "This review could not be withdrawn.";
             revalidatePath(`/spaces/${slug}`);
             revalidatePath("/admin");
             return "Review withdrawn.";
@@ -34,7 +34,7 @@ export async function updateReview(_previousMessage: string | null, form: FormDa
         if (!(await enforceRateLimit(RATE_LIMITS.reviewSubmission, identity.ownerKey)).allowed) {
             return "Too many review updates. Try again later.";
         }
-        if (!await saveOwnReview(privateDatabase(), identity.ownerKey, review.slug, review.rating, review.body)) {
+        if (!await saveOwnReview(privateDatabase(), identity, review.slug, review.rating, review.body)) {
             return "This listing is no longer available for reviews.";
         }
         revalidatePath(`/spaces/${review.slug}`);
@@ -57,7 +57,7 @@ export async function submitReport(_previousMessage: string | null, form: FormDa
         if (!(await enforceRateLimit(RATE_LIMITS.reportSubmission, identity.ownerKey)).allowed) {
             return "Too many reports submitted. Try again later.";
         }
-        if (!await submitContentReport(privateDatabase(), identity.ownerKey, report.target, report.reason, report.details)) {
+        if (!await submitContentReport(privateDatabase(), identity, report.target, report.reason, report.details)) {
             return "This content is no longer available to report.";
         }
         revalidatePath("/admin");

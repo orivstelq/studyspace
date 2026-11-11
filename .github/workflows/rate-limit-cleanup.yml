@@ -1,4 +1,4 @@
-name: Staging rate-limit cleanup
+name: Staging maintenance cleanup
 
 on:
   schedule:
@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Delete one bounded batch
+      - name: Delete one bounded batch per category
         env:
           MAINTENANCE_DATABASE_URL: ${{ secrets.MAINTENANCE_DATABASE_URL }}
           PGCONNECT_TIMEOUT: "15"
@@ -48,24 +48,28 @@ jobs:
           fi
           test -r "$PGSSLROOTCERT"
 
-          deleted_count="$(psql -X "$MAINTENANCE_DATABASE_URL" \
+          cleanup_counts="$(psql -X "$MAINTENANCE_DATABASE_URL" \
             --set=ON_ERROR_STOP=1 --quiet --tuples-only --no-align \
             --file=scripts/staging/verify-maintenance-connection.sql \
-            --file=scripts/cleanup-rate-limit-buckets.sql)"
+            --file=scripts/cleanup-maintenance.sql)"
 
-          if [[ ! "$deleted_count" =~ ^[0-9]+$ ]]; then
-            echo "::error::Cleanup did not return one numeric deletion count."
+          if [[ ! "$cleanup_counts" =~ ^[0-9]+\|[0-9]+\|[0-9]+\|[0-9]+$ ]]; then
+            echo "::error::Cleanup did not return exactly four numeric deletion counts."
             exit 1
           fi
+          IFS='|' read -r rate_count session_count report_count moderation_count <<< "$cleanup_counts"
 
-          echo "Deleted $deleted_count expired rate-limit buckets."
+          echo "Cleanup completed with bounded counts."
           {
-            echo "### Staging rate-limit cleanup"
-            echo "- Deleted buckets: \`$deleted_count\`"
-            echo "- Batch limit: \`1000\`"
+            echo "### Staging maintenance cleanup"
+            echo "- Expired rate-limit buckets: \`$rate_count\`"
+            echo "- Expired application sessions: \`$session_count\`"
+            echo "- Resolved reports past retention: \`$report_count\`"
+            echo "- Moderation actions past retention: \`$moderation_count\`"
+            echo "- Per-category batch limit: \`1000\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [[ "$deleted_count" == "1000" ]]; then
-            echo "::warning title=Rate-limit cleanup batch full::Check recent runs; repeated full batches indicate a cleanup backlog."
-            echo "- Result: full batch; compare consecutive hourly run summaries for backlog." >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$rate_count" == "1000" || "$session_count" == "1000" || "$report_count" == "1000" || "$moderation_count" == "1000" ]]; then
+            echo "::warning title=Maintenance cleanup batch full::Check recent runs; repeated full batches indicate a cleanup backlog."
+            echo "- Result: at least one full batch; compare consecutive hourly run summaries for backlog." >> "$GITHUB_STEP_SUMMARY"
           fi

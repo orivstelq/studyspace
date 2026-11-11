@@ -10,6 +10,8 @@ DO $verify_favorite_rls$
 DECLARE
     owner_a text;
     owner_b text;
+    account_a uuid;
+    account_b uuid;
     space_id uuid;
     affected integer;
 BEGIN
@@ -49,6 +51,12 @@ BEGIN
     IF NOT has_table_privilege(session_user, 'public."Favorite"', 'SELECT')
        OR NOT has_table_privilege(session_user, 'public."Favorite"', 'INSERT')
        OR NOT has_table_privilege(session_user, 'public."Favorite"', 'DELETE')
+       OR NOT has_function_privilege(session_user, 'public.resolve_account_identity(text)', 'EXECUTE')
+       OR NOT has_function_privilege(session_user, 'public.lookup_active_account_identity(text)', 'EXECUTE')
+       OR NOT has_function_privilege(session_user, 'public.set_active_account_context(uuid,text)', 'EXECUTE')
+       OR NOT has_function_privilege(session_user, 'public.set_moderator_account_context(uuid,text)', 'EXECUTE')
+       OR has_function_privilege(session_user, 'public.set_active_account_context(uuid,boolean)', 'EXECUTE')
+       OR has_table_privilege(session_user, 'public."ModeratorGrant"', 'SELECT')
        OR NOT EXISTS (
            SELECT 1
            FROM pg_catalog.pg_class AS relation
@@ -74,66 +82,82 @@ BEGIN
         RAISE EXCEPTION 'the exact disposable RLS fixture is missing or unsafe';
     END IF;
 
-    owner_a := 'staging-rls-a-' || md5(random()::text || clock_timestamp()::text || pg_backend_pid()::text);
-    owner_b := 'staging-rls-b-' || md5(random()::text || clock_timestamp()::text || pg_backend_pid()::text);
+    owner_a := md5('a' || random()::text || clock_timestamp()::text || pg_backend_pid()::text)
+        || md5('a2' || random()::text || clock_timestamp()::text);
+    owner_b := md5('b' || random()::text || clock_timestamp()::text || pg_backend_pid()::text)
+        || md5('b2' || random()::text || clock_timestamp()::text);
     IF owner_a = owner_b THEN
         RAISE EXCEPTION 'fictional probe identities collided';
     END IF;
 
-    PERFORM set_config('studyspace.favorite_owner', owner_a, true);
-    IF EXISTS (SELECT 1 FROM public."Favorite" WHERE "ownerKey" = owner_a AND "studySpaceId" = space_id) THEN
+    account_a := public.resolve_account_identity(owner_a);
+    account_b := public.resolve_account_identity(owner_b);
+    IF account_a IS NULL OR account_b IS NULL OR account_a = account_b THEN
+        RAISE EXCEPTION 'fictional probe accounts were not isolated';
+    END IF;
+
+    IF NOT public.set_active_account_context(account_a, owner_a) THEN
+        RAISE EXCEPTION 'owner A account context was rejected';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public."Favorite" WHERE "accountId" = account_a AND "studySpaceId" = space_id) THEN
         RAISE EXCEPTION 'fictional owner A unexpectedly already exists';
     END IF;
-    INSERT INTO public."Favorite" ("ownerKey", "studySpaceId") VALUES (owner_a, space_id);
-    IF NOT EXISTS (SELECT 1 FROM public."Favorite" WHERE "ownerKey" = owner_a AND "studySpaceId" = space_id) THEN
+    INSERT INTO public."Favorite" ("accountId", "studySpaceId") VALUES (account_a, space_id);
+    IF NOT EXISTS (SELECT 1 FROM public."Favorite" WHERE "accountId" = account_a AND "studySpaceId" = space_id) THEN
         RAISE EXCEPTION 'owner A cannot read its inserted Favorite';
     END IF;
     BEGIN
-        INSERT INTO public."Favorite" ("ownerKey", "studySpaceId") VALUES (owner_b, space_id);
+        INSERT INTO public."Favorite" ("accountId", "studySpaceId") VALUES (account_b, space_id);
         RAISE EXCEPTION 'owner A inserted owner B data';
     EXCEPTION WHEN insufficient_privilege THEN
         NULL;
     END;
 
-    PERFORM set_config('studyspace.favorite_owner', owner_b, true);
-    IF EXISTS (SELECT 1 FROM public."Favorite" WHERE "ownerKey" = owner_a AND "studySpaceId" = space_id) THEN
+    IF NOT public.set_active_account_context(account_b, owner_b) THEN
+        RAISE EXCEPTION 'owner B account context was rejected';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public."Favorite" WHERE "accountId" = account_a AND "studySpaceId" = space_id) THEN
         RAISE EXCEPTION 'owner B can read owner A data';
     END IF;
-    INSERT INTO public."Favorite" ("ownerKey", "studySpaceId") VALUES (owner_b, space_id);
-    IF NOT EXISTS (SELECT 1 FROM public."Favorite" WHERE "ownerKey" = owner_b AND "studySpaceId" = space_id) THEN
+    INSERT INTO public."Favorite" ("accountId", "studySpaceId") VALUES (account_b, space_id);
+    IF NOT EXISTS (SELECT 1 FROM public."Favorite" WHERE "accountId" = account_b AND "studySpaceId" = space_id) THEN
         RAISE EXCEPTION 'owner B cannot read its inserted Favorite';
     END IF;
-    DELETE FROM public."Favorite" WHERE "ownerKey" = owner_a AND "studySpaceId" = space_id;
+    DELETE FROM public."Favorite" WHERE "accountId" = account_a AND "studySpaceId" = space_id;
     GET DIAGNOSTICS affected = ROW_COUNT;
     IF affected <> 0 THEN
         RAISE EXCEPTION 'owner B deleted owner A data';
     END IF;
 
-    PERFORM set_config('studyspace.favorite_owner', owner_a, true);
-    IF NOT EXISTS (SELECT 1 FROM public."Favorite" WHERE "ownerKey" = owner_a AND "studySpaceId" = space_id) THEN
+    IF NOT public.set_active_account_context(account_a, owner_a) THEN
+        RAISE EXCEPTION 'owner A account context was rejected on retry';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM public."Favorite" WHERE "accountId" = account_a AND "studySpaceId" = space_id) THEN
         RAISE EXCEPTION 'owner A data changed across owner contexts';
     END IF;
-    IF EXISTS (SELECT 1 FROM public."Favorite" WHERE "ownerKey" = owner_b AND "studySpaceId" = space_id) THEN
+    IF EXISTS (SELECT 1 FROM public."Favorite" WHERE "accountId" = account_b AND "studySpaceId" = space_id) THEN
         RAISE EXCEPTION 'owner A can read owner B data';
     END IF;
-    DELETE FROM public."Favorite" WHERE "ownerKey" = owner_b AND "studySpaceId" = space_id;
+    DELETE FROM public."Favorite" WHERE "accountId" = account_b AND "studySpaceId" = space_id;
     GET DIAGNOSTICS affected = ROW_COUNT;
     IF affected <> 0 THEN
         RAISE EXCEPTION 'owner A deleted owner B data';
     END IF;
-    DELETE FROM public."Favorite" WHERE "ownerKey" = owner_a AND "studySpaceId" = space_id;
+    DELETE FROM public."Favorite" WHERE "accountId" = account_a AND "studySpaceId" = space_id;
     GET DIAGNOSTICS affected = ROW_COUNT;
     IF affected <> 1 OR EXISTS (
-        SELECT 1 FROM public."Favorite" WHERE "ownerKey" = owner_a AND "studySpaceId" = space_id
+        SELECT 1 FROM public."Favorite" WHERE "accountId" = account_a AND "studySpaceId" = space_id
     ) THEN
         RAISE EXCEPTION 'owner A cleanup failed';
     END IF;
 
-    PERFORM set_config('studyspace.favorite_owner', owner_b, true);
-    DELETE FROM public."Favorite" WHERE "ownerKey" = owner_b AND "studySpaceId" = space_id;
+    IF NOT public.set_active_account_context(account_b, owner_b) THEN
+        RAISE EXCEPTION 'owner B account context was rejected on cleanup';
+    END IF;
+    DELETE FROM public."Favorite" WHERE "accountId" = account_b AND "studySpaceId" = space_id;
     GET DIAGNOSTICS affected = ROW_COUNT;
     IF affected <> 1 OR EXISTS (
-        SELECT 1 FROM public."Favorite" WHERE "ownerKey" = owner_b AND "studySpaceId" = space_id
+        SELECT 1 FROM public."Favorite" WHERE "accountId" = account_b AND "studySpaceId" = space_id
     ) THEN
         RAISE EXCEPTION 'owner B cleanup failed';
     END IF;

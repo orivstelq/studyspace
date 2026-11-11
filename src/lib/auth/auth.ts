@@ -1,7 +1,9 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
 import { Auth0Client } from "@auth0/nextjs-auth0/server";
+import { lookupActiveAccountIdentity } from "../../features/account-lifecycle/repository";
+import { privateDatabase } from "../db/private-client";
+import { createIdentityKey } from "./identity-key";
 import { createSessionStore, SESSION_DURATION } from "./session-store";
 import { isModeratorSubject } from "./roles";
 import { sessionDisplayLabel } from "./identity";
@@ -36,18 +38,17 @@ export function getAuthClient() {
     return client;
 }
 
-export async function getFavoriteOwner() {
-    return (await getAuthIdentity())?.ownerKey ?? null;
-}
-
 export async function getAuthIdentity() {
     const session = await getAuthClient()?.getSession();
     if (!session?.user.sub) return null;
 
-    const ownerKey = createHash("sha256")
-        .update(JSON.stringify([process.env.AUTH0_DOMAIN, session.user.sub]))
-        .digest("hex");
+    const ownerKey = createIdentityKey(process.env.AUTH0_DOMAIN ?? "", session.user.sub);
+    const storedAccountId = (session.user as { studyspaceAccountId?: unknown }).studyspaceAccountId;
+    if (typeof storedAccountId !== "string") return null;
+    const accountId = await lookupActiveAccountIdentity(privateDatabase(), ownerKey);
+    if (!accountId || accountId !== storedAccountId) return null;
     return {
+        accountId,
         ownerKey,
         displayLabel: sessionDisplayLabel(session.user),
         isModerator: isModeratorSubject(session.user.sub),

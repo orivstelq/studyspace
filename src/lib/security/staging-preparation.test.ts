@@ -3,6 +3,17 @@ import { describe, expect, it } from "vitest";
 import { LOCAL_PLAYWRIGHT_BASE_URL, resolvePlaywrightBaseUrl } from "../../../playwright-origin";
 
 describe("staging preparation", () => {
+    it("ignores local secrets and authenticated browser state", () => {
+        const gitignore = readFileSync(".gitignore", "utf8");
+
+        for (const pattern of [
+            ".env*", "/playwright/.auth/", "*.pem", "*.key", "*.p12", "*.pfx",
+            "*.storage-state.json",
+        ]) {
+            expect(gitignore).toContain(pattern);
+        }
+    });
+
     it("uses localhost by default and accepts only an explicit HTTPS origin", () => {
         expect(resolvePlaywrightBaseUrl(undefined)).toBe(LOCAL_PLAYWRIGHT_BASE_URL);
         expect(resolvePlaywrightBaseUrl("https://staging.example.test/")).toBe("https://staging.example.test");
@@ -71,11 +82,19 @@ describe("staging preparation", () => {
         for (const privilege of ["SELECT", "INSERT", "DELETE"]) {
             expect(script).toContain(`has_table_privilege(session_user, 'public."Favorite"', '${privilege}')`);
         }
-        expect(script).toContain("staging-rls-a-");
-        expect(script).toContain("staging-rls-b-");
+        expect(script).toContain("owner_a := md5('a'");
+        expect(script).toContain("owner_b := md5('b'");
+        expect(script).toContain("|| md5('a2'");
+        expect(script).toContain("|| md5('b2'");
         expect(script).toContain('INSERT INTO public."Favorite"');
-        expect(script).toContain('"ownerKey" = owner_a AND "studySpaceId" = space_id');
-        expect(script).toContain('"ownerKey" = owner_b AND "studySpaceId" = space_id');
+        expect(script).toContain('"accountId" = account_a AND "studySpaceId" = space_id');
+        expect(script).toContain('"accountId" = account_b AND "studySpaceId" = space_id');
+        expect(script).toContain("public.resolve_account_identity(owner_a)");
+        expect(script).toContain("public.set_active_account_context(account_a, owner_a)");
+        expect(script).toContain("public.set_active_account_context(account_b, owner_b)");
+        expect(script).toContain("public.set_active_account_context(uuid,text)");
+        expect(script).toContain("public.set_moderator_account_context(uuid,text)");
+        expect(script).toContain("public.set_active_account_context(uuid,boolean)");
         expect(script).not.toContain("TRUNCATE");
         expect(script).not.toContain("COMMIT;");
         expect(script.trimEnd().endsWith("ROLLBACK;")).toBe(true);
@@ -119,7 +138,8 @@ describe("staging preparation", () => {
     it("schedules one fail-closed maintenance cleanup batch", () => {
         const workflow = readFileSync(".github/workflows/rate-limit-cleanup.yml", "utf8");
         const verify = readFileSync("scripts/staging/verify-maintenance-connection.sql", "utf8");
-        const cleanup = readFileSync("scripts/cleanup-rate-limit-buckets.sql", "utf8");
+        const cleanup = readFileSync("scripts/cleanup-maintenance.sql", "utf8");
+        const migration = readFileSync("prisma/migrations/20261110190000_add_lifecycle_retention_cleanup/migration.sql", "utf8");
 
         expect(workflow).toContain('cron: "17 * * * *"');
         expect(workflow).toContain("workflow_dispatch:");
@@ -137,12 +157,12 @@ describe("staging preparation", () => {
         expect(workflow).toContain("(gssencmode|service|servicefile|sslmode|sslrootcert)");
         expect(workflow).toContain("persist-credentials: false");
         expect(workflow).toContain("--set=ON_ERROR_STOP=1 --quiet --tuples-only --no-align");
-        expect(workflow).toContain('[[ ! "$deleted_count" =~ ^[0-9]+$ ]]');
+        expect(workflow).toContain('[[ ! "$cleanup_counts" =~ ^[0-9]+\\|[0-9]+\\|[0-9]+\\|[0-9]+$ ]]');
         expect(workflow.indexOf("verify-maintenance-connection.sql")).toBeLessThan(
-            workflow.indexOf("cleanup-rate-limit-buckets.sql"),
+            workflow.indexOf("cleanup-maintenance.sql"),
         );
         expect(workflow.match(/psql -X/g)).toHaveLength(1);
-        expect(workflow.match(/cleanup-rate-limit-buckets\.sql/g)).toHaveLength(1);
+        expect(workflow.match(/cleanup-maintenance\.sql/g)).toHaveLength(1);
         expect(workflow).toContain("repeated full batches indicate a cleanup backlog");
         expect(verify).toContain("session_user <> 'studyspace_staging_maintenance_login'");
         expect(verify).toContain("granted.rolname <> 'studyspace_maintenance'");
@@ -151,9 +171,38 @@ describe("staging preparation", () => {
         for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
             expect(verify).toContain(`has_table_privilege(session_user, 'public."RateLimitBucket"', '${privilege}')`);
         }
+        for (const table of ["AuthSession", "UserReport", "ModerationAction"]) {
+            for (const privilege of ["SELECT", "DELETE"]) {
+                expect(verify).toContain(`has_table_privilege(session_user, 'public."${table}"', '${privilege}')`);
+            }
+        }
+        expect(verify).toContain("cleanup_expired_lifecycle_records(integer)");
         expect(verify).not.toMatch(/^\s*(DELETE|INSERT|UPDATE|TRUNCATE)\s/m);
         expect(cleanup.match(/^SELECT /gm)).toHaveLength(1);
         expect(cleanup).toContain("cleanup_expired_rate_limit_buckets(1000)");
+        expect(cleanup).toContain("cleanup_expired_lifecycle_records(1000)");
+        expect(migration).toContain("FOR UPDATE SKIP LOCKED");
+        expect(migration).toContain("INTERVAL '89 days'");
+        expect(migration).toContain("INTERVAL '179 days'");
+        expect(migration).toContain('hold."expiresAt" > cutoff_time');
+        expect(migration).toContain("batch_size > 1000");
+    });
+
+    it("pins CI database operations to the PostgreSQL 18 service and verifies targets before migrations", () => {
+        const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+
+        expect(workflow).toContain("image: postgres:18");
+        expect(workflow).not.toContain("@localhost:5432");
+        expect(workflow.match(/@127\.0\.0\.1:5432/g)).toHaveLength(5);
+        expect(workflow).toContain('--health-cmd "pg_isready --username=postgres --dbname=postgres"');
+        expect(workflow).toContain("STUDYSPACE_TEST_DATABASE: studyspace_test");
+        expect(workflow).toContain("pg_isready --host=127.0.0.1 --port=5432");
+        expect(workflow).toContain('verify_target "$POSTGRES_ADMIN_URL" postgres');
+        expect(workflow).toContain('verify_target "$DIRECT_URL" studyspace_dev');
+        expect(workflow).toContain('verify_target "$TEST_DIRECT_URL" studyspace_test');
+        expect(workflow.indexOf("Verify PostgreSQL service and database targets")).toBeLessThan(
+            workflow.indexOf("Apply committed migrations and runtime grants"),
+        );
     });
 
     it("keeps public Review access column-scoped", () => {
@@ -164,8 +213,55 @@ describe("staging preparation", () => {
         expect(grants).toContain('GRANT SELECT ("id", "studySpaceId", "rating", "body", "status", "publishedAt") ON TABLE "Review" TO studyspace_app');
         expect(verify).toContain("public application role has table-wide Review read privileges");
         expect(verify).toContain("attribute.attname NOT IN ('id', 'studySpaceId', 'rating', 'body', 'status', 'publishedAt')");
-        for (const column of ["ownerKey", "createdAt", "updatedAt"]) {
+        for (const column of ["ownerAccountId", "createdAt", "updatedAt"]) {
             expect(grants).toContain(`"${column}"`);
         }
+    });
+
+    it("provides one credential-safe release smoke command without overstating live evidence", () => {
+        const packageJson = readFileSync("package.json", "utf8");
+        const release = readFileSync("scripts/verify-release.mjs", "utf8");
+        const publicVerifier = readFileSync("scripts/verify-staging.mjs", "utf8");
+
+        expect(packageJson).toContain('"verify:release": "node scripts/verify-release.mjs"');
+        for (const state of ["PLAYWRIGHT_USER_A_STATE", "PLAYWRIGHT_USER_B_STATE", "PLAYWRIGHT_MODERATOR_STATE"]) {
+            expect(release).toContain(state);
+        }
+        expect(release).toContain('git", ["ls-files", "--error-unmatch"');
+        expect(release).toContain('git", ["check-ignore", "--quiet"');
+        expect(release).toContain('tests/e2e/public.spec.ts');
+        expect(release).toContain('tests/e2e/live-auth.spec.ts');
+        expect(release).toContain('tests/e2e/authenticated.spec.ts');
+        expect(release.match(/NOT VERIFIED/g)).toHaveLength(3);
+        expect(publicVerifier).toContain('verifyPage(baseUrl, "/privacy")');
+        expect(publicVerifier).toContain('verifyPage(baseUrl, "/terms")');
+    });
+
+    it("keeps the Phase 17 rollout migration-first, credential-safe, and separate from moderator grants", () => {
+        const rollout = readFileSync("scripts/staging/phase17-rollout.mjs", "utf8");
+        const verify = readFileSync("scripts/staging/verify-database-security.sql", "utf8");
+        expect(rollout).not.toContain('import "dotenv/config"');
+        expect(rollout).toContain('"20261110170000_harden_account_context_authorization"');
+        expect(rollout).toContain('"20261110190000_add_lifecycle_retention_cleanup"');
+        expect(rollout).toContain('directUrl.searchParams.set("sslmode", "verify-full")');
+        expect(rollout).toContain('PGSSLROOTCERT: "system"');
+        expect(rollout).toContain('PGSSLMODE: "verify-full"');
+        expect(rollout).toContain('configuration.directUrl.password');
+        expect(rollout).toContain('"prisma", "migrate", "deploy"');
+        expect(rollout.indexOf('"prisma", "migrate", "deploy"')).toBeLessThan(
+            rollout.indexOf('"--file=scripts/grant-runtime-roles.sql"'),
+        );
+        expect(rollout.indexOf('"--file=scripts/grant-runtime-roles.sql"')).toBeLessThan(
+            rollout.indexOf('"--file=scripts/staging/verify-database-security.sql"'),
+        );
+        expect(rollout.indexOf("if (command.startsWith(\"moderator-\"))")).toBeLessThan(
+            rollout.indexOf('"prisma", "migrate", "deploy"'),
+        );
+        expect(rollout).toContain('STUDYSPACE_MODERATOR_SUBJECT_VERIFIED');
+        expect(rollout).toContain('account."state" = \'ACTIVE\'');
+        expect(rollout).toContain('identity."unlinkedAt" IS NULL');
+        expect(rollout).not.toContain("console.log(configuration.directUrl");
+        expect(verify).toContain("legacy ownership columns required for application rollback are missing");
+        expect(verify).toContain("legacy dual-write triggers required for application rollback are missing");
     });
 });

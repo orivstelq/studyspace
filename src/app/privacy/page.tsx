@@ -13,13 +13,13 @@ export default function PrivacyPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-harbor">Public project information</p>
             <h1 className="mt-4 text-4xl font-semibold tracking-tight">Privacy information</h1>
             <p className="mt-4 max-w-3xl leading-7 text-muted">
-                This page describes verified behavior in the current StudySpace application. StudySpace is personally operated by an independent developer as a portfolio project.
+                This page describes verified behavior in the current StudySpace application. For this engineering draft, StudySpace is treated as personally operated by an individual independent developer as a portfolio project.
             </p>
 
             <aside className="mt-8 grid rounded-2xl border border-dune bg-linen/50 p-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10 lg:p-6" aria-labelledby="privacy-review-heading">
-                <h2 id="privacy-review-heading" className="font-semibold">Owner review required before public launch</h2>
+                <h2 id="privacy-review-heading" className="font-semibold">Draft—not legal approval</h2>
                 <p className="mt-2 max-w-2xl leading-7 text-muted lg:mt-0">
-                    This is not a finalized privacy policy. The operator identity, retention periods, account-deletion process, legal jurisdiction, and provider disclosures still require owner review.
+                    This is not a legally approved privacy policy. The individual-operator assumption, operational retention enforcement, account-deletion process, applicable US laws, formal notice details, and provider disclosures still require owner confirmation or qualified legal review before public accounts are enabled.
                 </p>
             </aside>
 
@@ -35,16 +35,16 @@ export default function PrivacyPage() {
 
                 <PolicySection id="account-data" title="Account and community data">
                     <p className="mt-3">
-                        Private account records use a stable, issuer-scoped hash derived from the verified account identity. StudySpace stores selected space-category and amenity preferences, saved listing identifiers, and their timestamps.
+                        StudySpace derives a stable, issuer-scoped hash from the verified account identity and maps it to a random internal account generation. It stores selected space-category and amenity preferences, saved listing identifiers, and their timestamps against that internal account.
                     </p>
                     <p className="mt-3">
-                        Reviews store a rating, review text, listing, moderation status, and timestamps. Reports store a target, reason, optional details, status, and timestamps. Moderation records store the action, target, time, and a hashed moderator identity.
+                        Reviews store a rating, review text, listing, moderation status, timestamps, and an internal account association while linked. Reports store a target, reason, optional details, status, timestamps, and a reporter association while linked. Moderation records store the action, target, time, and a moderator association while linked.
                     </p>
                 </PolicySection>
 
                 <PolicySection id="visibility" title="What is public">
                     <p className="mt-3">
-                        Published listing information is public. Only moderator-approved review ratings, text, and publication times are returned by public review queries. Account labels, owner hashes, preferences, favorites, pending reviews, reports, and moderation records are not included in public responses.
+                        Published listing information is public. Only moderator-approved review ratings, text, and publication times are returned by public review queries. Account labels, identity hashes, internal account identifiers, preferences, favorites, pending reviews, reports, and moderation records are not included in public responses.
                     </p>
                     <p className="mt-3">
                         New and edited reviews stay private until approved. Editing an approved review removes it from public view while approval is pending. Withdrawing a review removes it from public view but does not delete the stored review row. Reports are visible only to authorized moderators through the application.
@@ -64,38 +64,46 @@ export default function PrivacyPage() {
                     <p className="mt-3">
                         The documented staging architecture uses Auth0 for authentication, Vercel for the application runtime, and Neon PostgreSQL for application data. A Google connection may be enabled through Auth0, but the final production connection, scopes, provider credentials, regions, and contractual data-handling terms must be confirmed by the owner before launch.
                     </p>
-                    <p className="mt-3">The current application code contains no advertising or product-analytics integration.</p>
+                    <p className="mt-3">
+                        The current application code contains no advertising, product-analytics, payment, or subscription integration. This draft assumes no initial monetization; it does not promise that the service will always remain free or non-commercial.
+                    </p>
+                </PolicySection>
+
+                <PolicySection id="audience" title="Initial audience and age">
+                    <p className="mt-3">
+                        The provisional launch plan limits public accounts to people aged 18 or older in the United States. Accounts for people outside the United States are deferred. StudySpace does not collect a birth date, government identification, or residence and does not currently have a technical age- or country-verification control. The owner must approve how this eligibility rule will be communicated and enforced, and obtain qualified advice on applicable federal and state requirements, before public registration is enabled.
+                    </p>
                 </PolicySection>
 
                 <PolicySection id="retention" title="Retention and deletion status">
                     <p className="mt-3">
-                        StudySpace does not yet have a published retention schedule or an account-wide deletion workflow. A signed-in user can remove individual favorites, edit preferences, sign out, and withdraw a review. Those controls do not delete every record associated with an account.
+                        StudySpace has approved engineering targets and repository code for bounded cleanup, but does not yet enforce them through a deployed retention schedule: resolved reports should be removed no later than 90 days after resolution, open reports should remain only until resolution and then for no more than 90 days, moderation and security audit records should remain no more than 180 days except for documented limited holds, and expired application-session rows should be removed within seven days. These are implementation targets, not a claim that automated deletion is currently active.
                     </p>
                     <p className="mt-3">
-                        The repository contains a design for a future authenticated deletion workflow, but destructive deletion has not been implemented. Backup retention, report handling, review disposition, audit preservation, and deletion from Auth0 all require owner decisions before that workflow can be offered.
+                        StudySpace does not yet offer an account-wide deletion workflow. A signed-in user can remove individual favorites, edit preferences, sign out, and withdraw a review, but those controls do not delete every record associated with an account. The repository contains a local database foundation for a future authenticated deletion workflow; reauthentication, provider deletion, scheduled retention enforcement, backup behavior, and recovery still require verification before it can be offered.
                     </p>
                 </PolicySection>
 
                 <PolicySection id="support" title="Support and privacy requests">
                     <p className="mt-3">
-                        For privacy questions, account-data requests, or deletion inquiries, email <a href={publicContact.href} className="font-semibold text-harbor underline">{publicContact.email}</a>. StudySpace does not yet offer an automated account-wide deletion workflow, and the unresolved retention and deletion decisions described above still apply.
+                        For privacy questions, account-data requests, or deletion inquiries, email <a href={publicContact.href} className="font-semibold text-harbor underline">{publicContact.email}</a>. Requests require identity verification and manual review. StudySpace does not yet offer an operationally verified account-wide deletion workflow, and the unresolved retention, provider, backup, and legal decisions described above still apply.
                     </p>
                 </PolicySection>
 
                 <PolicySection id="review-items" title="Decisions still requiring owner review">
                     <ul className="mt-3 list-disc space-y-2 pl-6">
-                        <li>Operator identity, formal notice details, and applicable jurisdiction.</li>
-                        <li>Retention periods for account, community, security, provider-log, and backup data.</li>
+                        <li>The individual operator&apos;s public legal identity, formal notice details, and applicable federal and state law.</li>
+                        <li>Deployment and monitoring of the approved application retention targets, plus provider-log and backup retention.</li>
                         <li>Account deletion, export, correction, and appeal procedures.</li>
                         <li>Production service providers, regions, subprocessors, and Google/Auth0 connection settings.</li>
-                        <li>Audience and age requirements, including whether minors may create accounts.</li>
+                        <li>Legal review and enforceability of the provisional United States and age-18 eligibility rule.</li>
                     </ul>
                 </PolicySection>
             </div>
 
             <div className="mt-12 grid border-t border-clay pt-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
                 <p className="max-w-2xl text-sm text-muted lg:col-start-2">
-                    Engineering draft last reviewed <time dateTime="2026-11-09">November 9, 2026</time>.
+                    Engineering draft last reviewed <time dateTime="2026-11-10">November 10, 2026</time>.
                 </p>
             </div>
         </main>

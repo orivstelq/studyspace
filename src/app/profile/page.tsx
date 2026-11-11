@@ -38,7 +38,7 @@ async function ProfileContent() {
     );
 
     const [storedPreferences, candidates] = await Promise.all([
-        getProfile(privateDatabase(), identity.ownerKey),
+        getProfile(privateDatabase(), identity),
         listRecommendationCandidates(),
     ]);
     const preferences = storedPreferences ?? emptyPreferences;

@@ -1,6 +1,6 @@
 # Staging deployment preparation
 
-Status: the isolated staging application is deployed from commit `70e2bf4`, and Vercel reports it Ready. Database roles, migrations, grants, and the scheduled cleanup are provisioned. Verified evidence and incomplete release gates are recorded in `docs/VERIFICATION.md` and `docs/STAGING_CHECKLIST.md`; staging readiness does not imply commercial production readiness.
+Status: the isolated staging application is deployed from commit `70e2bf4`, and Vercel reports it Ready. On 2026-11-10, the five Phase 17 expand migrations were applied to the parent staging database; all 15 migration checksums, runtime grants, RLS, and database security checks passed. The application release commit `b32c4ab5866d15fd01aeec344464ea8846c957bf` has not been promoted. The expand schema retains legacy ownership columns for application rollback; the destructive contract migration is intentionally deferred. Verified evidence and incomplete release gates are recorded in `docs/VERIFICATION.md` and `docs/STAGING_CHECKLIST.md`; staging readiness does not imply commercial production readiness.
 
 ## Fixed environment boundary
 
@@ -19,8 +19,8 @@ The existing permission roles remain group roles and are not recreated:
 | Permission role | Login | Inherit | Purpose |
 | --- | --- | --- | --- |
 | `studyspace_app` | no | no | Published listings and approved public review reads |
-| `studyspace_saved` | no | no | Session, owner-scoped private data, community mutations, and shared rate limits |
-| `studyspace_maintenance` | no | no | Execute the bounded rate-limit cleanup function only |
+| `studyspace_saved` | no | no | Session, account-scoped private data, community mutations, shared rate limits, and narrow identity/context functions |
+| `studyspace_maintenance` | no | no | Execute the bounded rate-limit and lifecycle-retention cleanup functions only |
 
 After explicit approval, create exactly three environment-specific login identities:
 
@@ -32,7 +32,77 @@ After explicit approval, create exactly three environment-specific login identit
 
 Each login is `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS`. PostgreSQL 18 membership is granted with `INHERIT TRUE`, `SET FALSE`, and `ADMIN FALSE` for exactly one permission role. The global `NOINHERIT` default makes an accidental future membership inert unless its inheritance is reviewed explicitly. `SET FALSE` prevents changing identity to the group role, and `ADMIN FALSE` prevents delegating membership. Permission roles own no SQL objects; runtime logins own no SQL objects and are never members of `neondb_owner` or a Neon administrative role.
 
-This layout matters for RLS. The migration owner bypasses policies as table owner, while the runtime login does not own tables, has no `BYPASSRLS`, and reaches privileges only through its reviewed permission role. The application still must set the verified owner/moderator transaction context; RLS is defense in depth, not authentication.
+This layout matters for RLS. The migration owner bypasses policies as table owner, while the runtime login does not own tables, has no `BYPASSRLS`, and reaches privileges only through its reviewed permission role. The application still must set the verified account/moderator transaction context; RLS is defense in depth, not authentication.
+
+Phase 17C does not add a staging lifecycle login. `studyspace_saved` cannot read lifecycle tables or finalize a closure. The migration-owner-only local finalizer must not be connected to Vercel. A separately reviewed NOLOGIN lifecycle permission role, environment login, exact function grants, reauthentication, and Auth0 worker design are required before any cloud closure workflow.
+
+The authorization migration does not infer or backfill moderators: PostgreSQL cannot derive the server-only `AUTH0_MODERATOR_SUBJECTS` allowlist safely. Before deploying the hardened application, an owner-operated procedure must map each approved Auth0 subject through a verified application login to its current active account UUID, then insert exactly that UUID into `ModeratorGrant`. A plain insert must fail if a row already exists; reactivating a revoked grant is a separate reviewed decision. Never accept the UUID from browser form data, and never grant the runtime role table access. Rehearsal must prove that an allowed Auth0 subject without the database grant is denied, a non-allowlisted subject with no grant is denied, the paired allowlist plus grant works, and closing the generation revokes the grant. No such staging grant is created by this repository change.
+
+## Phase 17 controlled rollout
+
+The parent staging branch is the Neon branch named `production` inside project `curly-paper-15884428`; that provider label does not make it a public production environment. Its direct endpoint hostname and branch ID must be copied from the Neon dashboard immediately before release. They are deliberately not guessed or hardcoded. The rollout guard rejects pooled hosts, the disposable rehearsal endpoint and branch ID, any database other than `studyspace_staging`, any user other than `neondb_owner`, PostgreSQL outside major 18, a dirty or unapproved source commit, and any migration history other than the ten reviewed baseline migrations followed by the exact five Phase 17 migrations.
+
+Have the approved secret manager inject `DIRECT_URL`; do not paste it into the command line or a tracked file. Supply these non-secret release assertions in the operator environment:
+
+- `STUDYSPACE_NEON_PROJECT_ID=curly-paper-15884428`
+- `STUDYSPACE_NEON_BRANCH_NAME=production`
+- `STUDYSPACE_NEON_BRANCH_ID` set to the dashboard-confirmed parent branch ID
+- `STUDYSPACE_STAGING_HOST` set to the dashboard-confirmed direct endpoint hostname
+- `STUDYSPACE_APPROVED_COMMIT` set to the full reviewed commit hash
+
+Run the read-only gate first:
+
+```sh
+node scripts/staging/phase17-rollout.mjs check
+```
+
+The command uses Node's system certificate trust with `sslmode=verify-full`, then runs the existing read-only owner/role preflight through libpq with `PGSSLMODE=verify-full` and `PGSSLROOTCERT=system`. It never passes the connection URL or password as a command argument and redacts either value from child-process output. `PASS` for project and branch metadata means the operator-supplied dashboard values matched the reviewed constants and endpoint; PostgreSQL cannot independently attest Neon project or branch labels.
+
+Immediately before mutation, confirm in Neon that the parent branch still has a usable recovery point and record a UTC timestamp no more than 30 minutes old. After explicit owner approval, set `STUDYSPACE_ROLLOUT_APPROVED=yes` and `STUDYSPACE_RECOVERY_CONFIRMED_AT` to that timestamp, then run:
+
+```sh
+node scripts/staging/phase17-rollout.mjs apply
+```
+
+`apply` repeats every read-only gate, applies the five migrations through `prisma migrate deploy`, reapplies `grant-runtime-roles.sql`, runs the full database security verifier, and requires all 15 names and checksums afterward. It stops before application deployment. The security verifier also requires the legacy ownership columns and five dual-write triggers needed by the currently deployed application and code rollback. If an interruption occurs after one or more reviewed Phase 17 migrations commit, `apply` accepts only that exact checksum-valid migration prefix and resumes the remaining suffix; it can also safely reapply grants and verification after all 15 migrations. A failed migration row or any non-prefix history still stops the command. The old application remains in service while the operator repairs forward. Never reverse or edit an applied migration.
+
+The disposable rehearsal instructions below are retained for reproducibility and future migration work. They are no longer a pending prerequisite for the completed parent staging rollout.
+
+### Disposable retention-migration rehearsal
+
+The deliberate verifier `scripts/staging/rehearse-retention-migration.mjs` is pinned to project `curly-paper-15884428`, disposable branch `rehearsal-account-lifecycle` (`br-cold-king-beer2yusy`), direct endpoint `ep-solitary-butterfly-be2qqvk8.c-9.us-east-2.aws.neon.tech`, database `studyspace_staging`, and owner `neondb_owner`. It rejects the parent endpoint, a pooler, URL service/certificate overrides, disabled Node TLS verification, a dirty worktree, an unapproved commit, non-PostgreSQL-18 servers, and any history where migration 15 is not the only pending migration.
+
+Have the approved terminal secret source inject only `DIRECT_URL`; do not source `.env`, pass the URL as an argument, or save it in a file. Set the four non-secret assertions and run the read-only gate:
+
+```sh
+export STUDYSPACE_NEON_PROJECT_ID=curly-paper-15884428
+export STUDYSPACE_NEON_BRANCH_ID=br-cold-king-beer2yusy
+export STUDYSPACE_NEON_BRANCH_NAME=rehearsal-account-lifecycle
+export STUDYSPACE_APPROVED_COMMIT=<full-reviewed-commit-sha>
+node scripts/staging/rehearse-retention-migration.mjs check
+```
+
+After separate rehearsal approval, set `STUDYSPACE_REHEARSAL_APPROVED=yes` and `STUDYSPACE_REHEARSAL_CONFIRMED_AT` to a UTC timestamp no more than 30 minutes old, then run `node scripts/staging/rehearse-retention-migration.mjs apply`. The command applies the sole pending migration, reapplies grants, runs the database security verifier, and verifies the cleanup function's security-definer owner, fixed search path, maintenance-only execution, and lack of maintenance direct-table access. It never invokes cleanup. `PASS` for project/branch metadata confirms the supplied dashboard assertions and pinned endpoint; PostgreSQL cannot independently attest a Neon branch label.
+
+### Owner-only moderator grant
+
+Moderator provisioning is separate from migration rollout and is never performed by `apply`. First have the intended dedicated staging account sign in successfully. Obtain its exact Auth0 subject from the verified Auth0 account/session record and its active StudySpace account UUID from the subject-derived account mapping; never select by email, display name, or a browser-supplied UUID. Confirm the exact subject is present in the staging server's `AUTH0_MODERATOR_SUBJECTS` value.
+
+With the same protected direct-owner connection and release metadata, inject the exact staging values as `AUTH0_DOMAIN`, `AUTH0_MODERATOR_SUBJECTS`, `STUDYSPACE_MODERATOR_SUBJECT`, and `STUDYSPACE_MODERATOR_ACCOUNT_ID`. Set `STUDYSPACE_MODERATOR_SUBJECT_VERIFIED=yes` only after comparing the subject with Auth0. Run the read-only eligibility check:
+
+```sh
+node scripts/staging/phase17-rollout.mjs moderator-check
+```
+
+The check derives the same issuer/subject digest as the application, requires the explicit account UUID to match the active, unlinked, latest identity generation, confirms the subject is in the supplied exact allowlist, and fails if any grant already exists. It does not prove that the supplied allowlist matches Vercel; retain a redacted dashboard comparison as release evidence.
+
+After a separate grant approval, set `STUDYSPACE_MODERATOR_GRANT_APPROVED=yes` and a fresh `STUDYSPACE_MODERATOR_GRANT_CONFIRMED_AT` UTC timestamp, then deliberately run:
+
+```sh
+node scripts/staging/phase17-rollout.mjs moderator-grant
+```
+
+The command repeats every check under a transaction and account row lock, inserts one `ModeratorGrant`, and fails on a concurrent, active, or revoked existing row. It never reactivates or revokes a grant. After application deployment, verify one allowlisted moderator and one non-moderator through the actual staging application; database eligibility alone is not live Auth0 authorization evidence.
 
 ## Exact provisioning sequence
 
@@ -69,7 +139,7 @@ Treat the sequence below as the reviewed procedure for a new environment; the ex
 
    Never use `prisma migrate dev`, reset, a shadow database, or migration rewriting against staging. The grant script revokes `PUBLIC` database temporary/connect access and schema creation, then grants database connection, schema usage, and reviewed object privileges to the permission roles.
 
-6. Run `scripts/staging/verify-database-security.sql` as the owner. Then connect separately with each runtime URL and verify `session_user`, `current_user`, `pg_has_role`, object privileges, and denial cases. The application login must fail to read `Favorite`, `UserProfile`, `AuthSession`, `UserReport`, `ModerationAction`, and `RateLimitBucket`. The private login must be unable to cross account owner context, reassign a review, or obtain moderator access without the server-controlled setting. The maintenance login must execute only the bounded cleanup function and must not read or delete the table directly.
+6. Run `scripts/staging/verify-database-security.sql` as the owner. Then connect separately with each runtime URL and verify `session_user`, `current_user`, `pg_has_role`, object privileges, and denial cases. The application login must fail to read `Favorite`, `UserProfile`, `AuthSession`, `UserReport`, `ModerationAction`, `ModeratorGrant`, and `RateLimitBucket`. The private login must be unable to cross a verified account/digest pair, execute the former UUID/boolean context function, read or change moderator grants, or enable moderator context for an account without an active grant. The maintenance login must execute only the bounded cleanup function and must not read or delete the table directly.
 
    For the deliberate Favorite RLS check, have the secret manager inject `STAGING_OWNER_PGHOST`, `STAGING_OWNER_PGPASSWORD`, `STAGING_SAVED_PGHOST`, and `STAGING_SAVED_PGPASSWORD`; the matching `STAGING_OWNER_PGPORT` and `STAGING_SAVED_PGPORT` are optional. Do not supply a connection URL or put a password in the command. Run only the guarded wrapper:
 
@@ -108,7 +178,7 @@ Configure these directly in the staging project's encrypted settings. Do not use
 | `PRIVATE_DATABASE_POOL_MAX` | Start at 2 per instance; tune from Neon metrics |
 | `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET` | Dedicated staging Auth0 application only |
 | `AUTH0_SECRET` | Independent staging session secret, 32 bytes or longer |
-| `AUTH0_MODERATOR_SUBJECTS` | Exact dedicated staging test subjects only |
+| `AUTH0_MODERATOR_SUBJECTS` | Keep absent until a moderator is independently verified; then use exact dedicated staging subjects only |
 | `RATE_LIMIT_SECRET` | Independent staging HMAC secret, 32 bytes or longer |
 | `TRUSTED_CLIENT_IP_SOURCE` | `vercel`, only after deployed ingress verification |
 | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | Stable staging value shared across builds/instances and rollback |
@@ -120,6 +190,10 @@ Configure these directly in the staging project's encrypted settings. Do not use
 The two runtime URLs use Neon pooled endpoints. Each warm Vercel instance can open both application pools, so the approximate application ceiling is `(DATABASE_POOL_MAX + PRIVATE_DATABASE_POOL_MAX) × concurrent instances`; validate queueing and connections under live staging load. The direct endpoint is reserved for migrations and short administrative checks. Neon can support Prisma migrations through its current pooler, but a direct owner endpoint keeps ownership and long-running DDL separate from runtime traffic.
 
 Run migrations once before promoting application code. Migrations are forward-only and must be backward compatible. Roll back application code by promoting the prior immutable Vercel deployment with the same Server Action encryption key. Never automatically reverse a schema migration. For data recovery, restore to an isolated Neon branch/project, validate counts and security policies, and change both runtime URLs together only after approval.
+
+For Phase 17, run the controlled database rollout above while the old deployment remains live, provision any approved moderator grant separately, and only then build and promote the reviewed application commit. Confirm the Vercel application environment has pooled public/private runtime URLs, the exact staging Auth0 configuration, the stable Server Action key, rate-limit secret, and trusted-ingress setting; it must not contain `DIRECT_URL`, `MAINTENANCE_DATABASE_URL`, or a lifecycle-owner credential. Smoke-test existing sessions plus fresh login, Saved, Profile, reviews, private reports, moderator/non-moderator behavior, and logout. There is no account-closure route, action, or control in this release.
+
+If the new application fails, promote the prior immutable Vercel deployment without reversing the expand migrations. The legacy owner columns, raw-setting compatibility policies, and dual-write triggers keep that code path available. Do not run a contract migration during this rollback window. Database recovery is a separate incident operation: stop writes, restore to an isolated branch, validate data and RLS, and obtain approval before changing runtime URLs.
 
 Before production release, choose and record backup retention, recovery-point objective, and recovery-time objective. A staging manual snapshot was restored into a separate branch on 2026-11-08, both published library listings were verified, and the branch was deleted; this did not verify full database integrity or application cutover. Recovery history is currently limited to six hours, and scheduled snapshots are unavailable on the current Neon plan.
 
@@ -149,7 +223,7 @@ The verifier rejects non-HTTPS origins and credential-bearing URLs, sends no coo
 
 ## Known live-cloud gates
 
-- PostgreSQL 18.6 on the actual Neon compute, including all migrations, role membership flags, owner checks, RLS denials, review immutability, moderator setting isolation, and bounded cleanup
+- Application smoke coverage against the migrated parent database, including existing sessions, private account flows, and moderator/non-moderator behavior
 - Vercel's actual `x-vercel-forwarded-for` overwrite behavior under conflicting browser-supplied forwarding headers
 - HTTPS redirect, HSTS, CSP console behavior, cookie flags, callbacks, logout, and back-channel invalidation on the final staging domain
 - Connection-pool behavior under concurrency and cold starts
@@ -157,6 +231,6 @@ The verifier rejects non-HTTPS origins and credential-bearing URLs, sends no coo
 - Monitoring and alerts; the approved cleanup schedule has one successful recorded run
 - The live three-session Playwright suite, moderator approval/rejection, and a manual keyboard/mobile pass
 - An executed Vercel rollback; deployment `b508b79` is Ready and Instant Rollback is available, but neither was exercised
-- Resolution of the Vercel Node.js version override warning and Auth0 development-key warning
+- Resolution of the Auth0 development-key warning
 
 The CSP intentionally retains `script-src 'unsafe-inline'` and inline styles for the current Next.js Cache Components/partial-prerendering architecture. It blocks external script sources and inline event attributes, but it is not nonce-level protection and cannot stop every inline-script injection. That residual risk remains a production gate.

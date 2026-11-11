@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
+import type { AccountContext } from "../account-lifecycle/repository";
 import { withPrivateContext } from "../../lib/db/private-context";
 import type { Amenity, SpaceCategory } from "../discovery/types";
 
@@ -16,10 +17,10 @@ const databaseCategories = {
     coworking: "COWORKING",
 } as const;
 
-export function getProfile(db: Database, ownerKey: string): Promise<ProfilePreferences | null> {
-    return withPrivateContext(db, ownerKey, false, async (tx) => {
+export function getProfile(db: Database, identity: AccountContext): Promise<ProfilePreferences | null> {
+    return withPrivateContext(db, identity, false, async (tx) => {
         const profile = await tx.userProfile.findUnique({
-            where: { ownerKey },
+            where: { accountId: identity.accountId },
             select: { preferredCategory: true, preferredAmenities: true },
         });
         if (!profile) return null;
@@ -31,11 +32,11 @@ export function getProfile(db: Database, ownerKey: string): Promise<ProfilePrefe
     });
 }
 
-export function saveProfile(db: Database, ownerKey: string, preferences: ProfilePreferences) {
-    return withPrivateContext(db, ownerKey, false, (tx) => tx.userProfile.upsert({
-        where: { ownerKey },
+export function saveProfile(db: Database, identity: AccountContext, preferences: ProfilePreferences) {
+    return withPrivateContext(db, identity, false, (tx) => tx.userProfile.upsert({
+        where: { accountId: identity.accountId },
         create: {
-            ownerKey,
+            accountId: identity.accountId,
             preferredCategory: preferences.category === "all" ? null : databaseCategories[preferences.category],
             preferredAmenities: preferences.amenities,
         },
@@ -43,6 +44,6 @@ export function saveProfile(db: Database, ownerKey: string, preferences: Profile
             preferredCategory: preferences.category === "all" ? null : databaseCategories[preferences.category],
             preferredAmenities: preferences.amenities,
         },
-        select: { ownerKey: true },
+        select: { accountId: true },
     }));
 }

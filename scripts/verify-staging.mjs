@@ -85,6 +85,9 @@ async function main() {
     const baseUrl = baseUrlFromEnvironment();
     await verifyPage(baseUrl, "/");
     await verifyPage(baseUrl, "/explore");
+    await verifyPage(baseUrl, "/privacy");
+    await verifyPage(baseUrl, "/terms");
+    await verifyPage(baseUrl, "/spaces/alkek-library");
     await verifyJson(baseUrl, "/api/spaces?q=Alkek", 200, (payload) => (
         typeof payload === "object" && payload !== null && Array.isArray(payload.data)
     ));
@@ -94,7 +97,7 @@ async function main() {
     await verifyJson(baseUrl, "/api/spaces/not-a-published-listing", 404, (payload) => (
         payload?.error?.code === "NOT_FOUND"
     ));
-    console.log("Staging public verification passed without sending credentials or mutation requests.");
+    console.log("Staging public verification passed without sending credentials or account mutation requests.");
 }
 
 main().catch((error) => {

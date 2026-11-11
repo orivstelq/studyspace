@@ -10,10 +10,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run src",
+    "test": "vitest run src tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test",
-    "verify:staging": "node scripts/verify-staging.mjs"
+    "verify:staging": "node scripts/verify-staging.mjs",
+    "verify:release": "node scripts/verify-release.mjs"
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "4.33.0",

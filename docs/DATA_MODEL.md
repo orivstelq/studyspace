@@ -130,11 +130,11 @@ No public write endpoints in the first release.
 
 ## 9. Community Entities
 
-`Review` is unique by owner and listing. Ratings are 1–5 and review text is 20–2,000 characters. Status transitions control public visibility; only approved rows have a publication timestamp.
+`Review` is unique by non-null account generation and listing. Ratings are 1–5 and review text is 20–2,000 characters. Status transitions control public visibility; only approved rows have a publication timestamp. During the Phase 17 expand window, compatibility triggers keep legacy actor keys and account IDs synchronized; a later separately reviewed contract migration will remove the legacy columns.
 
-`UserReport` targets exactly one published listing or visible review. Open-report partial unique indexes limit an account to one active report per target. Reports and resolution data are moderator-private.
+`UserReport` targets exactly one published listing or visible review. Open-report partial unique indexes limit an account to one active report per target. Reports and resolution data are moderator-private. Account closure clears free-form report details before unlinking a retained reporter association.
 
-`ModerationAction` records the hashed moderator identity, action, target, and timestamp. Application roles may insert moderator-authorized audit rows but cannot update or delete them.
+`ModerationAction` records the optional random moderator account, immutable target reference, action, and timestamp. Application roles may insert moderator-authorized audit rows but cannot update or delete them.
 
 ## 10. Migration Strategy
 
@@ -161,15 +161,17 @@ Use separate development and production databases.
 
 ## Implemented private tables
 
-`Favorite` is keyed by a hash of the configured issuer domain and authenticated subject, together with the study space UUID. The composite key makes repeated saves idempotent. Deleting a study space cascades to favorites. Archived spaces are hidden from Saved while their bookmarks remain stored. PostgreSQL row-level security matches the owner against a transaction-local setting.
+`Account` is a random UUID generation with `ACTIVE`, `CLOSING`, or `CLOSED` state. `AccountIdentity` maps a deterministic issuer/subject digest to a numbered generation and enforces one active mapping. `AccountClosure` enforces one idempotent closure record per generation. These tables use RLS with no direct runtime table grants.
 
-`AuthSession` stores the SDK session identifier, provider subject, provider session identifier, creation time, expiry, and one optional display label. The label is the provider display name or email fallback used by the private account UI. Existing rows may keep it null. The data supports expiry enforcement, sign-out, and provider-initiated revocation without persisting provider tokens or a broader profile. Runtime grants are applied separately from Prisma migrations.
+`Favorite` is keyed by random account UUID and study space UUID. The composite key makes repeated saves idempotent. Deleting a study space cascades to favorites. Archived spaces are hidden from Saved while their bookmarks remain stored. PostgreSQL row-level security matches the account against a transaction-local UUID after locking an `ACTIVE` account row.
 
-`UserProfile` is keyed by the same issuer-scoped owner hash as favorites. It stores an optional preferred category and up to five known amenity codes. A database check rejects unsupported or oversized preference sets, and row-level security prevents cross-owner reads and writes.
+`AuthSession` stores the SDK session identifier, provider subject, provider session identifier, creation time, expiry, optional account UUID, and one optional display label. The label is the provider display name or email fallback used by the private account UI. Pre-Phase-17 rows may keep the account UUID null until their next verified read. The data supports expiry enforcement, sign-out, account-state invalidation, and provider-initiated revocation without persisting provider tokens or a broader profile.
 
-`Review`, `UserReport`, and `ModerationAction` use role-specific PostgreSQL policies. The public role can read only approved reviews for published non-fixture listings. Review owner and listing keys are immutable after insertion. Owners can read and edit only their own review, can insert reports without reading them back, and cannot use moderator policies through browser input. Editing an approved review returns the single stored row to pending and removes it from public reads until reapproved.
+`UserProfile` is keyed by random account UUID. It stores an optional preferred category and up to five known amenity codes. A database check rejects unsupported or oversized preference sets, and row-level security prevents cross-account reads and writes.
 
-The transaction-local moderator flag is set only after trusted server-side role assignment, but it remains an application-controlled database setting rather than an independently authenticated database role. The private runtime credential and server process are therefore part of the moderator trust boundary.
+`Review`, `UserReport`, and `ModerationAction` use role-specific PostgreSQL policies. The public role can read only approved reviews for published non-fixture listings and only six public columns. Review account and listing keys are immutable after insertion except for migration-owner closure unlinking from a non-null account to `NULL`; relinking is prohibited. Reporters and moderation actors can likewise be unlinked while independent target UUIDs preserve the minimum target reference. `RetentionHold` stores a finite case reference, reason, approver, review time, and expiry for a review or audit action; it has no runtime table grant. `ModeratorGrant` is a private, owner-provisioned allowlist keyed to one account generation; runtime roles can neither read nor change it.
+
+Verified transactions bind the random account UUID to its matching active identity digest. Moderator context additionally requires both the server-side Auth0 subject allowlist and an unrevoked `ModeratorGrant`; the old UUID/boolean function is denied to runtime roles. Transaction settings still transport the result and are not independently authenticated database identities. The private runtime credential and server process remain part of the trust boundary, and the expand-release legacy policy branches remain until a later contract migration removes rollback compatibility.
 
 `RateLimitBucket` stores one atomic fixed-window counter per scoped HMAC key. It contains no raw account subject or client address. Only the private runtime role can read or mutate counters; the public directory role has no table privilege. A security-definer cleanup function deletes bounded, ordered batches more than one day after reset. Its maintenance role can execute the function but has no table access.
 
