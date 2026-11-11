@@ -13,13 +13,13 @@ export default function PrivacyPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-harbor">Public project information</p>
             <h1 className="mt-4 text-4xl font-semibold tracking-tight">Privacy information</h1>
             <p className="mt-4 max-w-3xl leading-7 text-muted">
-                This page describes verified behavior in the current StudySpace application. StudySpace is personally operated by an independent developer as a portfolio project.
+                This page describes verified behavior in the current StudySpace application. For this engineering draft, StudySpace is treated as personally operated by an individual independent developer as a portfolio project.
             </p>
 
             <aside className="mt-8 grid rounded-2xl border border-dune bg-linen/50 p-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10 lg:p-6" aria-labelledby="privacy-review-heading">
-                <h2 id="privacy-review-heading" className="font-semibold">Owner review required before public launch</h2>
+                <h2 id="privacy-review-heading" className="font-semibold">Draft—not legal approval</h2>
                 <p className="mt-2 max-w-2xl leading-7 text-muted lg:mt-0">
-                    This is not a finalized privacy policy. Formal operator details, operational retention enforcement, the account-deletion process, legal jurisdiction, and provider disclosures still require owner review.
+                    This is not a legally approved privacy policy. The individual-operator assumption, operational retention enforcement, account-deletion process, applicable US laws, formal notice details, and provider disclosures still require owner confirmation or qualified legal review before public accounts are enabled.
                 </p>
             </aside>
 
@@ -64,7 +64,15 @@ export default function PrivacyPage() {
                     <p className="mt-3">
                         The documented staging architecture uses Auth0 for authentication, Vercel for the application runtime, and Neon PostgreSQL for application data. A Google connection may be enabled through Auth0, but the final production connection, scopes, provider credentials, regions, and contractual data-handling terms must be confirmed by the owner before launch.
                     </p>
-                    <p className="mt-3">The current application code contains no advertising or product-analytics integration.</p>
+                    <p className="mt-3">
+                        The current application code contains no advertising, product-analytics, payment, or subscription integration. This draft assumes no initial monetization; it does not promise that the service will always remain free or non-commercial.
+                    </p>
+                </PolicySection>
+
+                <PolicySection id="audience" title="Initial audience and age">
+                    <p className="mt-3">
+                        The provisional launch plan limits public accounts to people aged 18 or older in the United States. Accounts for people outside the United States are deferred. StudySpace does not collect a birth date, government identification, or residence and does not currently have a technical age- or country-verification control. The owner must approve how this eligibility rule will be communicated and enforced, and obtain qualified advice on applicable federal and state requirements, before public registration is enabled.
+                    </p>
                 </PolicySection>
 
                 <PolicySection id="retention" title="Retention and deletion status">
@@ -84,11 +92,11 @@ export default function PrivacyPage() {
 
                 <PolicySection id="review-items" title="Decisions still requiring owner review">
                     <ul className="mt-3 list-disc space-y-2 pl-6">
-                        <li>Operator identity, formal notice details, and applicable jurisdiction.</li>
+                        <li>The individual operator&apos;s public legal identity, formal notice details, and applicable federal and state law.</li>
                         <li>Deployment and monitoring of the approved application retention targets, plus provider-log and backup retention.</li>
                         <li>Account deletion, export, correction, and appeal procedures.</li>
                         <li>Production service providers, regions, subprocessors, and Google/Auth0 connection settings.</li>
-                        <li>Audience and age requirements, including whether minors may create accounts.</li>
+                        <li>Legal review and enforceability of the provisional United States and age-18 eligibility rule.</li>
                     </ul>
                 </PolicySection>
             </div>

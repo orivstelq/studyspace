@@ -68,6 +68,22 @@ node scripts/staging/phase17-rollout.mjs apply
 
 The first four Phase 17 migrations were rehearsed on the disposable Neon branch. The fifth migration adds only the bounded maintenance function and grants, but it must receive its own disposable Neon PostgreSQL 18 rehearsal before parent staging approval.
 
+### Disposable retention-migration rehearsal
+
+The deliberate verifier `scripts/staging/rehearse-retention-migration.mjs` is pinned to project `curly-paper-15884428`, disposable branch `rehearsal-account-lifecycle` (`br-cold-king-beer2yusy`), direct endpoint `ep-solitary-butterfly-be2qqvk8.c-9.us-east-2.aws.neon.tech`, database `studyspace_staging`, and owner `neondb_owner`. It rejects the parent endpoint, a pooler, URL service/certificate overrides, disabled Node TLS verification, a dirty worktree, an unapproved commit, non-PostgreSQL-18 servers, and any history where migration 15 is not the only pending migration.
+
+Have the approved terminal secret source inject only `DIRECT_URL`; do not source `.env`, pass the URL as an argument, or save it in a file. Set the four non-secret assertions and run the read-only gate:
+
+```sh
+export STUDYSPACE_NEON_PROJECT_ID=curly-paper-15884428
+export STUDYSPACE_NEON_BRANCH_ID=br-cold-king-beer2yusy
+export STUDYSPACE_NEON_BRANCH_NAME=rehearsal-account-lifecycle
+export STUDYSPACE_APPROVED_COMMIT=<full-reviewed-commit-sha>
+node scripts/staging/rehearse-retention-migration.mjs check
+```
+
+After separate rehearsal approval, set `STUDYSPACE_REHEARSAL_APPROVED=yes` and `STUDYSPACE_REHEARSAL_CONFIRMED_AT` to a UTC timestamp no more than 30 minutes old, then run `node scripts/staging/rehearse-retention-migration.mjs apply`. The command applies the sole pending migration, reapplies grants, runs the database security verifier, and verifies the cleanup function's security-definer owner, fixed search path, maintenance-only execution, and lack of maintenance direct-table access. It never invokes cleanup. `PASS` for project/branch metadata confirms the supplied dashboard assertions and pinned endpoint; PostgreSQL cannot independently attest a Neon branch label.
+
 ### Owner-only moderator grant
 
 Moderator provisioning is separate from migration rollout and is never performed by `apply`. First have the intended dedicated staging account sign in successfully. Obtain its exact Auth0 subject from the verified Auth0 account/session record and its active StudySpace account UUID from the subject-derived account mapping; never select by email, display name, or a browser-supplied UUID. Confirm the exact subject is present in the staging server's `AUTH0_MODERATOR_SUBJECTS` value.

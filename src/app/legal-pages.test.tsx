@@ -21,7 +21,10 @@ describe("public legal information", () => {
         expect(privacyMetadata.title).toBe("Privacy information");
         expect(html).toContain("<h1");
         expect(html).toContain("Privacy information</h1>");
-        expect(html).toContain("Owner review required before public launch");
+        expect(html).toContain("Draft—not legal approval");
+        expect(html).toContain("people aged 18 or older in the United States");
+        expect(html).toContain("does not currently have a technical age- or country-verification control");
+        expect(html).toContain("no advertising, product-analytics, payment, or subscription integration");
         expect(html).toContain("repository code for bounded cleanup, but does not yet enforce them through a deployed retention schedule");
         expect(html).toContain("Requests require identity verification and manual review");
         expect(html).toContain("does not yet offer an account-wide deletion workflow");
@@ -40,6 +43,9 @@ describe("public legal information", () => {
         expect(termsMetadata.title).toBe("Terms information");
         expect(html).toContain("Terms of use</h1>");
         expect(html).toContain("Not a finalized agreement");
+        expect(html).toContain("initial United States audience aged 18 or older");
+        expect(html).toContain("does not currently verify age or residence technically");
+        expect(html).toContain("no initial monetization");
         expect(html).toContain(`href="${publicContact.href}"`);
         expect(html).toContain(publicContact.email);
         expect(html).toContain('<main id="main-content" class="mx-auto w-full max-w-5xl');

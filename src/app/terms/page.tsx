@@ -20,7 +20,7 @@ export default function TermsPage() {
             <aside className="mt-8 grid rounded-2xl border border-dune bg-linen/50 p-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10 lg:p-6" aria-labelledby="terms-review-heading">
                 <h2 id="terms-review-heading" className="font-semibold">Not a finalized agreement</h2>
                 <p className="mt-2 max-w-2xl leading-7 text-muted lg:mt-0">
-                    Owner review is still required for the operator identity, eligibility, acceptable-use rules, content license, suspension process, warranties, liability, governing law, and dispute terms. This page does not present those unresolved matters as agreed legal terms.
+                    This engineering draft assumes an individual operator, an initial United States audience aged 18 or older, and no initial monetization. Those assumptions and the operator identity, acceptable-use rules, content license, suspension process, warranties, liability, governing law, and dispute terms still require owner confirmation or qualified legal review. This page does not present unresolved matters as agreed legal terms.
                 </p>
             </aside>
 
@@ -39,7 +39,7 @@ export default function TermsPage() {
                         Authentication is provided through Auth0. StudySpace uses the verified server session for account identity and authorization. The application does not accept a browser-supplied owner or moderator role as proof of access.
                     </p>
                     <p className="mt-3">
-                        A minimum age, account eligibility rule, account termination process, and complete account-deletion process have not been approved. They must be settled before these terms can become a final agreement.
+                        The provisional eligibility rule permits accounts only for people aged 18 or older in the United States; broader international availability is deferred. StudySpace does not currently verify age or residence technically. The owner must approve the rule, its enforcement, and applicable legal requirements before public registration is enabled. The account-termination and complete account-deletion processes also remain unfinished.
                     </p>
                 </PolicySection>
 
@@ -57,7 +57,7 @@ export default function TermsPage() {
 
                 <PolicySection id="availability" title="Availability and changes">
                     <p className="mt-3">
-                        The project is currently deployed to staging and may change as it is developed. No uptime commitment, service-level agreement, warranty, limitation of liability, or commercial-use commitment has been approved.
+                        The project is currently deployed to staging and may change as it is developed. It has no payment or subscription feature, and this draft assumes no initial monetization. No uptime commitment, service-level agreement, warranty, limitation of liability, promise of continued free access, or commercial-use commitment has been approved.
                     </p>
                 </PolicySection>
 

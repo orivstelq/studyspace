@@ -33,11 +33,13 @@ Remove localhost, preview, and staging URLs from the production application. Kee
 
 The Auth0 development Google keys are not suitable for real public accounts. In an owner-controlled Google Cloud project:
 
-1. Configure the OAuth consent screen with the final homepage, `/privacy`, `/terms`, and the approved support email. Select the intended audience and publishing status only after the eligibility/jurisdiction decision.
+1. Configure the OAuth consent screen with the final homepage, `/privacy`, `/terms`, the verified final domain, and the approved support email. The engineering draft assumes an initial United States audience aged 18 or older, but Google OAuth's external user type is not a geographic or age gate. Select the publishing status only after the owner approves how the application will enforce that eligibility rule and completes any required qualified legal review.
 2. Request only the identity scopes used by StudySpace: `openid`, `profile`, and `email`.
 3. Create a Web application OAuth client. Set the authorized JavaScript origin to the exact Auth0 tenant/custom-domain origin and the redirect URI to `https://<AUTH0_DOMAIN>/login/callback`.
 4. Put the Google client ID and secret into the Auth0 Google social connection, enable it only for the production StudySpace Auth0 application, and remove/disable Auth0 development keys.
 5. Test consent, first login, repeat login, logout, account switching, revoked consent, unverified/missing email behavior, linked identities, and provider-user deletion with dedicated accounts.
+
+The owner must perform and record the Google Cloud and Auth0 dashboard steps. Repository review cannot prove the OAuth consent-screen publishing status, domain ownership, production-key installation, Auth0 application type, enabled connection set, or exact production URLs. Keep public registration disabled until those values and a fresh interactive login/logout test pass.
 
 The Auth0 application callback (`/auth/callback`) and the Google-to-Auth0 connection callback (`/login/callback`) are different and both must be exact.
 

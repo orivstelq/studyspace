@@ -120,7 +120,7 @@ Auth0 sessions are server-verified, backed by PostgreSQL, non-rolling, and expir
 
 ## Public v1 migration-first release sequence
 
-This is the canonical order for the current Phase 17 release. `docs/STAGING.md` and `scripts/staging/phase17-rollout.mjs` provide the exact guarded staging commands; no step below authorizes a cloud mutation by itself.
+The concise operator sequence is consolidated in `docs/RELEASE_RUNBOOK.md`. This section records its architecture rationale. `docs/STAGING.md` and `scripts/staging/phase17-rollout.mjs` provide the exact guarded staging commands; no document authorizes a cloud mutation by itself.
 
 1. **Freeze the artifact.** Record the reviewed commit, require green pull-request CI, and confirm the build contains no account-deletion route or control.
 2. **Verify the target.** From the provider dashboard, record the exact project, branch ID and label, direct non-pooled hostname, database, PostgreSQL major version, and owner login. The branch label `production` in the staging project is only a provider default.

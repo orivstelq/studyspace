@@ -8,7 +8,7 @@ StudySpace is a full-stack directory for finding study-friendly places. It combi
 
 ## Project status
 
-StudySpace is an independently operated portfolio project preparing for its first public release. Public browsing is suitable for a limited launch after the documented staging migration and smoke checks. Unrestricted public account enrollment remains gated on finalized privacy/terms decisions, operational retention enforcement, production Auth0 social credentials, and live moderator testing.
+StudySpace is an independently operated portfolio project preparing for its first public release. Public browsing is suitable for a limited launch after the documented staging migration and smoke checks. Public account enrollment remains gated on owner/legal review of the provisional US age-18 audience, operational retention enforcement, production Auth0 social credentials, and live two-account and moderator testing.
 
 Account-wide deletion is not currently offered and is not advertised as a released feature. The database foundation and remaining approval gates are documented in [Account lifecycle](docs/ACCOUNT_LIFECYCLE.md).
 
@@ -89,7 +89,7 @@ Integration tests refuse remote hosts and databases outside the local allowlist.
 
 Deployments are migration-first: verify the exact database and recovery point, apply only the reviewed pending migrations, reapply runtime grants, verify database security, then promote the compatible application build. Application rollback promotes the previous immutable deployment without reversing forward-only migrations.
 
-The guarded Phase 17 staging procedure and moderator-grant checks are in [STAGING.md](docs/STAGING.md). The consolidated production sequence and remaining external gates are in [DEPLOYMENT.md](docs/DEPLOYMENT.md). Auth0/Google dashboard preparation is in [AUTHENTICATION_RELEASE.md](docs/AUTHENTICATION_RELEASE.md), and the manual account-data request procedure is in [DATA_REQUESTS.md](docs/DATA_REQUESTS.md).
+The guarded Phase 17 staging procedure and moderator-grant checks are in [STAGING.md](docs/STAGING.md). The final operator sequence is in [RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md), with architecture detail in [DEPLOYMENT.md](docs/DEPLOYMENT.md). Auth0/Google dashboard preparation is in [AUTHENTICATION_RELEASE.md](docs/AUTHENTICATION_RELEASE.md), and the manual account-data request procedure is in [DATA_REQUESTS.md](docs/DATA_REQUESTS.md).
 
 ## Privacy and support
 
@@ -99,8 +99,8 @@ Please report security issues privately using [SECURITY.md](SECURITY.md), not in
 
 ## Documentation
 
-[Product requirements](docs/PRD.md) · [Architecture](docs/ARCHITECTURE.md) · [Data model](docs/DATA_MODEL.md) · [Security specification](docs/SECURITY.md) · [Authentication release](docs/AUTHENTICATION_RELEASE.md) · [Data requests](docs/DATA_REQUESTS.md) · [Deployment](docs/DEPLOYMENT.md) · [Staging](docs/STAGING.md) · [Verification record](docs/VERIFICATION.md)
+[Product requirements](docs/PRD.md) · [Architecture](docs/ARCHITECTURE.md) · [Data model](docs/DATA_MODEL.md) · [Security specification](docs/SECURITY.md) · [Authentication release](docs/AUTHENTICATION_RELEASE.md) · [Data requests](docs/DATA_REQUESTS.md) · [Release runbook](docs/RELEASE_RUNBOOK.md) · [Deployment](docs/DEPLOYMENT.md) · [Staging](docs/STAGING.md) · [Verification record](docs/VERIFICATION.md)
 
 ## License
 
-No open-source license has been selected. Public repository visibility permits viewing the source but does not grant permission to copy, modify, or redistribute it. The owner should choose and add a license only after deciding the intended reuse terms.
+StudySpace is available under the [MIT License](LICENSE).
